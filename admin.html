@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11131a">
+<meta name="robots" content="noindex">
+<title>Ballpark · Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="forms.css">
+<style>
+  .app { max-width: 760px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tabs button { border: 0; background: var(--panel); color: var(--muted); border-radius: 999px; padding: 9px 14px; font-weight: 700; cursor: pointer; }
+  .tabs button.on { background: var(--ink); color: var(--bg); }
+  .tabs .count { opacity: .6; margin-left: 4px; }
+  .set { background: var(--panel); border-radius: var(--radius); padding: 16px 18px; display: grid; gap: 10px; }
+  .set .head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .set .head b { font-size: 17px; }
+  .set .meta { color: var(--muted); font-size: 14px; }
+  .set ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+  .set li { font-size: 15px; line-height: 1.35; }
+  .set li .ans { color: var(--gold); font-weight: 700; }
+  .set li .sub { color: var(--muted); font-size: 13px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions button { border: 0; background: var(--panel-2); color: var(--ink); border-radius: 10px; padding: 8px 12px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  .actions button.danger { color: var(--danger); }
+  .actions button:disabled { opacity: .35; cursor: default; }
+  .players { display: flex; flex-wrap: wrap; gap: 6px; }
+  .players span { background: var(--panel-2); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 14px; display: inline-flex; gap: 8px; align-items: center; }
+  .players span b { color: var(--mint); font-variant-numeric: tabular-nums; }
+  .players button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 6px; }
+  .pill { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; padding: 3px 8px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+  .pill.today { color: var(--bg); background: var(--mint); }
+  .empty { color: var(--muted); text-align: center; padding: 24px; }
+  .editbar { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--bg) 30%); padding: 20px 0 12px; display: grid; grid-template-columns: auto 1fr; gap: 10px; }
+  label.check { display: flex; gap: 10px; align-items: center; font-size: 15px; }
+  label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="logo" id="logo"></div>
+    <div style="display:flex;gap:14px;align-items:center"><a href="index.html">Screen</a><a href="add.html">Add set</a><a href="#" id="logout" class="hidden">Log out</a></div>
+  </div>
+
+  <div id="login" class="card hidden">
+    <h1>Quiz admin</h1>
+    <label class="field"><span>Password</span><input class="input" id="pass" type="password" autocomplete="current-password"></label>
+    <button class="btn block" id="loginBtn">Log in</button>
+  </div>
+
+  <div id="main" class="hidden" style="display:grid;gap:16px">
+    <div class="tabs" id="tabs"></div>
+    <div id="view" style="display:grid;gap:14px"></div>
+  </div>
+
+  <div id="edit" class="hidden" style="display:grid;gap:18px">
+    <div class="card">
+      <h1 id="editTitle">Edit set</h1>
+      <p class="hint" id="editHint"></p>
+      <label class="field"><span>Author</span><input class="input" id="editAuthor" maxlength="40"></label>
+      <label class="check"><input type="checkbox" id="editBackup"> Backup set (only used when the queue is empty)</label>
+    </div>
+    <div id="editor" style="display:grid;gap:18px"></div>
+    <div class="editbar"><button class="btn ghost" id="cancelEdit">Cancel</button><button class="btn" id="saveEdit">Save</button></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { CONFIG } from './config.js';
+import { rpc, fmt, fmtDate, esc } from './common.js';
+import { createSetEditor } from './editor.js';
+
+const $ = (id) => document.getElementById(id);
+$('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
+
+let pass = sessionStorage.getItem('bp_admin') || '';
+let data = null;
+let tab = 'queue';
+let editing = null;   // { id | null, ... }
+
+function toast(msg, ok = false) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  if (ok) t.style.background = 'var(--mint)', t.style.color = 'var(--bg)';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 3500);
+}
+
+async function admin(action, args = {}) {
+  const r = await rpc('quiz_admin', { p_pass: pass, p_action: action, p_args: args });
+  if (r?.error) throw new Error(r.error);
+  return r;
+}
+
+function show(which) {
+  ['login', 'main', 'edit'].forEach((id) => $(id).classList.toggle('hidden', id !== which));
+  $('logout').classList.toggle('hidden', which === 'login');
+  window.scrollTo(0, 0);
+}
+
+// ---------- Login ----------
+async function tryLogin() {
+  try { await admin('login'); sessionStorage.setItem('bp_admin', pass); await load(); show('main'); }
+  catch (e) { sessionStorage.removeItem('bp_admin'); show('login'); if (pass) toast(e.message); }
+}
+$('loginBtn').onclick = () => { pass = $('pass').value; tryLogin(); };
+$('pass').onkeydown = (e) => { if (e.key === 'Enter') $('loginBtn').click(); };
+$('logout').onclick = (e) => { e.preventDefault(); pass = ''; sessionStorage.removeItem('bp_admin'); show('login'); };
+
+// ---------- Data + rendering ----------
+async function load() { data = await admin('list'); render(); }
+
+function answerText(q) {
+  if (q.kind === 'map') return `📍 ${esc(q.label || `${q.lat?.toFixed(3)}, ${q.lng?.toFixed(3)}`)}`;
+  return `${fmt(q.answer)} ${esc(q.unit || '')}`;
+}
+
+function setCard(s, opts) {
+  const qs = s.questions.map((q) => `<li>${esc(q.prompt)}<br><span class="ans">${answerText(q)}</span>
+    ${q.fact ? `<span class="sub"> · ${esc(q.fact)}</span>` : ''}${q.source_url ? ` <a class="sub" href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : ''}${q.image_url ? ' <span class="sub">· 🖼 image</span>' : ''}</li>`).join('');
+  return `<div class="set" data-id="${s.id}">
+    <div class="head"><b>${opts.title}</b><span class="meta">${opts.meta || ''}</span></div>
+    <ol>${qs}</ol>
+    ${opts.players ?? ''}
+    <div class="actions">${opts.actions}</div>
+  </div>`;
+}
+
+function render() {
+  const today = data.today;
+  const counts = { queue: data.queue.length, days: data.days.length, backups: data.backups.length };
+  $('tabs').innerHTML = [['queue', 'Queue'], ['days', 'Today & past'], ['backups', 'Backups'], ['settings', 'Settings']]
+    .map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l}${counts[k] !== undefined ? `<span class="count">${counts[k]}</span>` : ''}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach((b) => b.onclick = () => { tab = b.dataset.t; render(); });
+
+  let html = '';
+  if (tab === 'queue') {
+    html = `<div class="actions"><button data-a="new">＋ New set</button></div>` + (data.queue.length ? data.queue.map((s, i) => setCard(s, {
+      title: `#${i + 1} · ${esc(s.author)}`,
+      meta: `runs ${fmtDate(s.expected_date, { weekday: 'short', day: 'numeric', month: 'short' })}`,
+      actions: `<button data-a="edit">Edit</button>
+        <button data-a="up" ${i === 0 ? 'disabled' : ''}>↑</button><button data-a="down" ${i === data.queue.length - 1 ? 'disabled' : ''}>↓</button>
+        <button data-a="top" ${i === 0 ? 'disabled' : ''}>Play next</button>
+        <button data-a="to-backup">Make backup</button><button data-a="delete" class="danger">Delete</button>`,
+    })).join('') : `<div class="empty">The queue is empty. Backup sets are used until someone adds a set.</div>`);
+  } else if (tab === 'days') {
+    html = data.days.length ? data.days.map((s) => {
+      const isToday = s.play_date === today;
+      const players = s.players.length
+        ? `<div class="players">${s.players.map((p) => `<span>${esc(p.player)} <b>${fmt(p.total)}</b><button title="Remove these answers" data-a="del-sub" data-sub="${p.id}" data-name="${esc(p.player)}">✕</button></span>`).join('')}</div>`
+        : '<div class="hint">Nobody has answered yet.</div>';
+      return setCard(s, {
+        title: `${fmtDate(s.play_date)} ${isToday ? '<span class="pill today">Today</span>' : ''}`,
+        meta: `by ${esc(s.author)}${s.is_backup ? ' · backup' : ''}`,
+        players,
+        actions: `<button data-a="edit">${s.played ? 'Fix answers' : 'Edit'}</button>
+          ${isToday && !s.players.length ? '<button data-a="unschedule">Put back in queue</button>' : ''}`,
+      });
+    }).join('') : '<div class="empty">Nothing has been played yet.</div>';
+  } else if (tab === 'backups') {
+    html = `<p class="hint">Backup sets are picked at random on days when the queue is empty. Each is used once.</p>
+      <div class="actions"><button data-a="new-backup">＋ New backup set</button></div>` +
+      (data.backups.length ? data.backups.map((s) => setCard(s, {
+        title: esc(s.author), meta: 'backup',
+        actions: `<button data-a="edit">Edit</button><button data-a="to-queue">Move to queue</button><button data-a="delete" class="danger">Delete</button>`,
+      })).join('') : '<div class="empty">No backup sets left.</div>');
+  } else {
+    html = `<div class="card"><h2>Change admin password</h2>
+      <label class="field"><span>New password (at least 8 characters)</span><input class="input" id="newPass" type="password" autocomplete="new-password"></label>
+      <button class="btn" id="savePass">Save password</button></div>`;
+  }
+  $('view').innerHTML = html;
+  bindActions();
+}
+
+function findSet(id) {
+  return [...data.queue, ...data.backups, ...data.days].find((s) => s.id === id);
+}
+
+function bindActions() {
+  $('view').querySelectorAll('[data-a]').forEach((b) => b.onclick = async () => {
+    const card = b.closest('.set');
+    const id = card ? +card.dataset.id : null;
+    const a = b.dataset.a;
+    try {
+      if (a === 'new') return openEditor(null, false);
+      if (a === 'new-backup') return openEditor(null, true);
+      if (a === 'edit') return openEditor(findSet(id));
+      if (['up', 'down', 'top'].includes(a)) await admin('move', { id, dir: a });
+      if (a === 'to-backup') await admin('set_backup', { id, backup: true });
+      if (a === 'to-queue') await admin('set_backup', { id, backup: false });
+      if (a === 'unschedule') { if (!confirm('Put today’s set back at the front of the queue? Another set will be picked for today.')) return; await admin('unschedule', { id }); }
+      if (a === 'delete') { if (!confirm('Delete this set for good?')) return; await admin('delete', { id }); toast('Set deleted', true); }
+      if (a === 'del-sub') { if (!confirm(`Remove ${b.dataset.name}'s answers for this day?`)) return; await admin('delete_submission', { id: +b.dataset.sub }); toast('Answers removed', true); }
+      await load();
+    } catch (e) { toast(e.message); }
+  });
+  const sp = $('savePass');
+  if (sp) sp.onclick = async () => {
+    try { await admin('set_password', { new: $('newPass').value }); pass = $('newPass').value; sessionStorage.setItem('bp_admin', pass); toast('Password changed', true); $('newPass').value = ''; }
+    catch (e) { toast(e.message); }
+  };
+}
+
+// ---------- Editing ----------
+let editor = null;
+function openEditor(set, backup) {
+  editing = { id: set?.id ?? null };
+  show('edit');
+  $('editTitle').textContent = set ? 'Edit set' : backup ? 'New backup set' : 'New set';
+  $('editHint').textContent = set?.played
+    ? 'People have already answered this set. If you change an answer, everyone’s points for it are recalculated.'
+    : '';
+  $('editAuthor').value = set?.author ?? (backup ? 'Quizbot' : '');
+  $('editBackup').checked = set ? !!set.is_backup : !!backup;
+  $('editBackup').disabled = !!set?.play_date;
+  editor = createSetEditor($('editor'), { toast });
+  if (set) editor.load(set.questions);
+}
+$('cancelEdit').onclick = () => show('main');
+$('saveEdit').onclick = async () => {
+  try {
+    const questions = editor.collect();
+    const author = $('editAuthor').value.trim();
+    if (!author) throw new Error('Add an author name');
+    await admin('save', { id: editing.id, author, questions, is_backup: $('editBackup').checked });
+    toast('Saved', true);
+    await load(); show('main');
+  } catch (e) { toast(e.message); }
+};
+
+if (pass) tryLogin(); else show('login');
+</script>
+</body>
+</html>

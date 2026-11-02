@@ -81,6 +81,7 @@
   .r .best { font-size: 1.1rem; font-weight: 600; }
   .r .best b { color: var(--mint); }
   .r .fact { font-size: 1rem; color: var(--muted); align-self: end; }
+  .r .fact .src { opacity: .75; font-style: italic; }
   .r.map { grid-template-columns: 1fr 13rem; grid-template-rows: auto auto auto 1fr; column-gap: 1rem; }
   .r.map > :not(.mini) { grid-column: 1; }
   .r.map .ans { font-size: 1.7rem; }
@@ -284,6 +285,9 @@ function fitBoard() {
 }
 window.addEventListener('resize', () => { lastQuestionsKey = ''; safely(refreshAll); });
 
+const domain = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+const factLine = (q) => [q.fact ? esc(q.fact) : '', q.source_url ? `<span class="src">Source: ${esc(domain(q.source_url))}</span>` : ''].filter(Boolean).join(' · ');
+
 function renderResults(res) {
   maps.forEach((m) => m.remove()); maps = [];
   if (!res || !res.questions) {
@@ -305,7 +309,7 @@ function renderResults(res) {
         <div class="rq">${q.position}. ${esc(q.prompt)}</div>
         <div class="ans">${esc(q.answer_label || 'See the map')}</div>
         <div class="best">${b ? `Closest: <b>${esc(b.player)}</b>, <span class="num">${fmt(Math.round(km))}</span> km away` : ''}</div>
-        <div class="fact">${esc(q.fact || '')}</div>
+        <div class="fact">${factLine(q)}</div>
         <div class="mini" id="mini-${q.id}"></div>
       </div>`;
     }
@@ -313,7 +317,7 @@ function renderResults(res) {
       <div class="rq">${q.position}. ${esc(q.prompt)}</div>
       <div class="ans num">${fmt(q.answer_num)}<small>${esc(q.unit || '')}</small></div>
       <div class="best">${b ? `Closest: <b>${esc(b.player)}</b> guessed <span class="num">${fmt(b.guess)}</span> · ${fmtPts(b.points)}` : ''}</div>
-      <div class="fact">${esc(q.fact || '')}</div>
+      <div class="fact">${factLine(q)}</div>
     </div>`;
   }).join('');
 

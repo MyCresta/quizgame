@@ -273,7 +273,8 @@ async function loadYesterday() {
       const g = me.guesses.find((x) => x.question_id === q.id);
       const correct = q.kind === 'map' ? esc(q.answer_label || 'the pin') : `${fmt(q.answer_num)} ${esc(q.unit || '')}`;
       const yours = q.kind === 'map' ? `${fmt(Math.round(distanceKm(q.answer_lat, q.answer_lng, g.lat, g.lng)))} km off` : `you said ${fmt(g.guess)}`;
-      return `<div class="line"><span>${q.position}. ${correct}<br><span class="muted">${yours}</span></span><span class="pts">${fmtPts(g.points)}</span></div>`;
+      const src = q.source_url ? ` · <a href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : '';
+      return `<div class="line"><span>${q.position}. ${correct}<br><span class="muted">${yours}${src}</span>${q.fact ? `<br><span class="muted" style="font-size:13px">${esc(q.fact)}</span>` : ''}</span><span class="pts">${fmtPts(g.points)}</span></div>`;
     }).join('');
     $('yesterday').innerHTML = `<div class="card yest">
       <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Your ${fmtDate(res.date, { weekday: 'long' })} results</h2><span class="muted">#${idx + 1} of ${res.players.length}</span></div>

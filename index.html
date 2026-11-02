@@ -156,6 +156,18 @@
     .r.map .mini { display: none; }
   }
 
+  /* ===== Short portrait areas, e.g. 1080×1312 next to another zone ===== */
+  @media (orientation: portrait) and (min-aspect-ratio: 3/4) {
+    html { font-size: min(1.75vw, 1.38vh); }
+    .right { grid-template-rows: 21rem; }
+    .results-grid { grid-template-columns: repeat(3, 1fr); grid-auto-rows: auto; height: 10.5rem; }
+    .r { grid-template-rows: auto auto 1fr; }
+    .r .ans { font-size: 1.9rem; }
+    .r.map { grid-template-columns: 1fr; }
+    .r.map .mini { display: none; }
+    .r.map .ans { font-size: 1.6rem; }
+  }
+
   .offline { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: .4rem 1rem; border-radius: 999px; font-size: 1rem; font-weight: 700; display: none; }
 </style>
 </head>

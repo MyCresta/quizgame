@@ -95,17 +95,6 @@ export function makeMap(el, { tiles = 'plain', interactive = true } = {}) {
   return map;
 }
 
-// A two-point line drawn on a map, used as a question picture ("distance between A and B").
-export function lineMap(el, line, { tiles = 'labels' } = {}) {
-  const m = makeMap(el, { tiles, interactive: false });
-  if (m.attributionControl) m.attributionControl.setPrefix(false);
-  L.polyline(line, { color: '#ff3b3b', weight: 5, opacity: 0.95 }).addTo(m);
-  line.forEach((p) => L.circleMarker(p, { radius: 7, color: '#fff', weight: 3, fillColor: '#ff3b3b', fillOpacity: 1 }).addTo(m));
-  const fit = () => { m.invalidateSize(); m.fitBounds(L.latLngBounds(line).pad(0.35), { maxZoom: 9 }); };
-  fit(); setTimeout(fit, 100);
-  return m;
-}
-
 export function pin(color = '#ff7a3d', size = 22) {
   return L.divIcon({
     className: '',
@@ -132,20 +121,4 @@ export const store = {
 
 export function pageUrl(file) {
   return new URL(file, location.href).href;
-}
-
-// Resize an image file in the browser and upload it to the public quiz-images bucket.
-export async function uploadImage(file) {
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
-  const res = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/quiz-images/${path}`, {
-    method: 'POST', headers: { apikey: CONFIG.supabaseKey, 'Content-Type': 'image/jpeg' }, body: blob,
-  });
-  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
-  return `${CONFIG.supabaseUrl}/storage/v1/object/public/quiz-images/${path}`;
 }

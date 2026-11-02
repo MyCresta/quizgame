@@ -18,8 +18,8 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
 - **Points right away**: players see their points per question as soon as they lock in, and the screen's scoreboard
   updates live with a "Today" column (turn off with `showLivePoints` in `config.js`). Correct answers, closest guesses and facts are revealed the next morning.
   The scoreboard covers the current month.
-- **Pictures**: a question can have an uploaded image (stored in the Supabase bucket `quiz-images`, resized to max 1400 px)
-  or a red line drawn between two places on a map.
+- **Pictures**: a question can have an image link (https://…). Nothing is stored in the database; the page checks the link
+  loads before the set can be submitted, and hides the picture if the link later breaks.
 - **Fits the screen**: long questions shrink to fit and the scoreboard shows as many rows as fit.
 - **Players**: type a name once on the phone, no sign-up. One answer per name per day. Authors can't answer their own set.
 

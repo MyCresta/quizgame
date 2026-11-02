@@ -36,8 +36,6 @@
   .q { background: var(--panel); border-radius: var(--radius); padding: 1.1rem 1.6rem; display: grid; grid-template-columns: 4.2rem 1fr; gap: 1.4rem; align-items: center; position: relative; overflow: hidden; min-height: 0; }
   .q.has-pic { padding-right: 17.5rem; }
   .q .pic { position: absolute; right: .9rem; top: .9rem; width: 15.5rem; height: calc(100% - 1.8rem); object-fit: cover; border-radius: 12px; background: var(--panel-2); }
-  .q .pic.leaflet-container { background: #0d1b2a; }
-  .q .pic .leaflet-control-attribution { font-size: 7px; }
   .q .n { font-size: 3.6rem; font-weight: 800; color: var(--accent); line-height: 1; text-align: center; }
   .q .prompt { min-width: 0; align-self: center; font-size: 1.95rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
   .q .prompt .tag { font-size: 1rem; vertical-align: .45em; margin-left: .3rem; white-space: nowrap; }
@@ -174,7 +172,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, lineMap, pin, dot, distanceKm, pageUrl } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -214,16 +212,13 @@ function renderQuestions(t) {
   }
   $('author').innerHTML = `Questions by <b>${esc(t.author)}</b>`;
   $('questions').innerHTML = qs.map((q) => `
-    <div class="q ${q.image_url || q.line ? 'has-pic' : ''}">
+    <div class="q ${q.image_url ? 'has-pic' : ''}">
       <div class="n">${q.position}</div>
       <div class="prompt">${esc(q.prompt)} ${q.kind === 'map'
           ? '<span class="tag map">📍 Map</span>'
           : q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : ''}</div>
-      ${q.image_url ? `<img class="pic" src="${esc(q.image_url)}" alt="">` : q.line ? `<div class="pic" id="qline-${q.id}"></div>` : ''}
+      ${q.image_url ? `<img class="pic" src="${esc(q.image_url)}" alt="" onerror="this.remove();this.parentElement?.classList.remove('has-pic')">` : ''}
     </div>`).join('');
-  if (typeof L !== 'undefined') {
-    for (const q of qs.filter((x) => x.line && !x.image_url)) qMaps.push(lineMap($(`qline-${q.id}`), q.line));
-  }
 }
 
 // Shrink long question texts until they fit inside their card.

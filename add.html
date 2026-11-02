@@ -39,10 +39,6 @@
   .hidden { display: none !important; }
   .ideas { font-size: 14px; color: var(--muted); padding-left: 1.1em; margin: 0; line-height: 1.6; }
   @media (max-width: 480px) { [data-part="map"] .row2 { grid-template-columns: 1fr; } }
-  .seg3 { grid-template-columns: 1fr 1fr 1fr; }
-  .seg button:disabled { opacity: .35; }
-  .drop { display: grid; place-items: center; text-align: center; min-height: 110px; border: 2px dashed var(--line); border-radius: 12px; padding: 16px; color: var(--muted); cursor: pointer; font-size: 14px; }
-  .drop.over { border-color: var(--accent); color: var(--ink); }
   .preview-img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; }
   .success { text-align: center; justify-items: center; }
   .success .big { font-size: 56px; }
@@ -80,7 +76,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, points, store, uploadImage } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, points, store } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -100,12 +96,12 @@ const SCORING = [
 ];
 const RADIUS = [[300, 'Within 300 km (same region)'], [1000, 'Within 1 000 km (same country-ish)'], [2000, 'Within 2 000 km (same continent)'], [5000, 'Within 5 000 km (rough area of the world)']];
 
-const state = [0, 1, 2].map(() => ({ kind: 'number', lat: null, lng: null, map: null, marker: null, pic: 'none', imageUrl: null, uploading: false, line: [], lineMap: null, lineLayer: null }));
+const state = [0, 1, 2].map(() => ({ kind: 'number', lat: null, lng: null, map: null, marker: null, imageOk: true }));
 
 function block(i) {
   return `<div class="card" id="q${i}">
     <h2><span class="n">${i + 1}</span> Question ${i + 1}</h2>
-    <div class="seg"><button data-k="number" class="on"># Number</button><button data-k="map">📍 Map pin</button></div>
+    <div class="seg" data-f="kindseg"><button data-k="number" class="on"># Number</button><button data-k="map">📍 Map pin</button></div>
     <label class="field"><span>Question</span><textarea class="input" data-f="prompt" maxlength="300" placeholder=""></textarea></label>
 
     <div data-part="number" style="display:grid;gap:14px">
@@ -130,18 +126,9 @@ function block(i) {
       </div>
     </div>
 
-    <div class="field"><span>Picture (optional)</span>
-      <div class="seg seg3" data-f="picseg"><button data-p="none" class="on">None</button><button data-p="image">🖼 Image</button><button data-p="line" data-f="linebtn">📏 Map line</button></div>
-    </div>
-    <div data-part="image" class="hidden" style="display:grid;gap:10px">
-      <label class="drop" data-f="drop"><input type="file" accept="image/*" data-f="file" hidden><span data-f="droptext">Tap to choose a photo, or paste / drop an image here</span></label>
-      <img class="preview-img hidden" data-f="img" alt="">
-    </div>
-    <div data-part="line" class="hidden" style="display:grid;gap:10px">
-      <div class="search"><input class="input" data-f="lsearch" placeholder="Search a place, e.g. Karlstad"><button class="btn ghost" data-f="lgo">Add point</button></div>
-      <div class="map" data-f="lmap"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="hint" data-f="lhint">Tap two places (or search them) to draw a red line between them.</span><button class="btn ghost" data-f="lclear" style="padding:.5em .9em">Clear</button></div>
-    </div>
+    <label class="field"><span>Image link (optional)</span><input class="input" data-f="imgurl" type="url" inputmode="url" placeholder="https://… (right-click an image → Copy image address)"></label>
+    <img class="preview-img hidden" data-f="img" alt="">
+    <div class="hint" data-f="imghint"></div>
     <label class="field"><span>Fun fact for the reveal (optional)</span><input class="input" data-f="fact" maxlength="300" placeholder="Shown on the screen with the answer"></label>
   </div>`;
 }
@@ -174,12 +161,10 @@ function updatePreview(i) {
 function setKind(i, kind) {
   state[i].kind = kind;
   const el = $(`q${i}`);
-  el.querySelectorAll('.seg button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind));
+  f(i, 'kindseg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind));
   el.querySelector('[data-part="number"]').classList.toggle('hidden', kind !== 'number');
   el.querySelector('[data-part="map"]').classList.toggle('hidden', kind !== 'map');
   f(i, 'prompt').placeholder = kind === 'map' ? 'e.g. Pin our newest office' : placeholders[i % 2];
-  f(i, 'linebtn').disabled = kind === 'map';   // a line would give away a map answer
-  if (kind === 'map' && state[i].pic === 'line') setPic(i, 'none');
   if (kind === 'map') {
     if (typeof L === 'undefined') { f(i, 'maphint').innerHTML = '<span class="error">The map failed to load. Check your connection.</span>'; return; }
     if (!state[i].map) {
@@ -211,106 +196,34 @@ async function search(i) {
   } catch { toast('Search failed. Tap the map instead.'); }
 }
 
-function setPic(i, p) {
-  const st = state[i];
-  if (p === 'line' && st.kind === 'map') p = 'none';
-  st.pic = p;
-  const el = $(`q${i}`);
-  f(i, 'picseg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.p === p));
-  el.querySelector('[data-part="image"]').classList.toggle('hidden', p !== 'image');
-  el.querySelector('[data-part="line"]').classList.toggle('hidden', p !== 'line');
-  if (p === 'line') {
-    if (typeof L === 'undefined') { f(i, 'lhint').innerHTML = '<span class="error">The map failed to load.</span>'; return; }
-    if (!st.lineMap) {
-      st.lineMap = makeMap(f(i, 'lmap'), { tiles: 'labels' });
-      st.lineMap.setView([59, 15], 4);
-      st.lineMap.on('click', (e) => addLinePoint(i, e.latlng));
-    }
-    setTimeout(() => st.lineMap.invalidateSize(), 50);
-  }
-}
-
-function drawLine(i) {
-  const st = state[i];
-  if (st.lineLayer) st.lineLayer.remove();
-  st.lineLayer = L.layerGroup().addTo(st.lineMap);
-  if (st.line.length === 2) L.polyline(st.line, { color: '#ff3b3b', weight: 5 }).addTo(st.lineLayer);
-  st.line.forEach((p) => L.circleMarker(p, { radius: 7, color: '#fff', weight: 3, fillColor: '#ff3b3b', fillOpacity: 1 }).addTo(st.lineLayer));
-  f(i, 'lhint').textContent = st.line.length === 2 ? 'Line ready. This picture is shown with the question.' : st.line.length === 1 ? 'Now tap the second place.' : 'Tap two places (or search them) to draw a red line between them.';
-}
-
-function addLinePoint(i, ll) {
-  const st = state[i];
-  const w = L.latLng(ll).wrap();
-  if (st.line.length >= 2) st.line = [];
-  st.line.push([+w.lat.toFixed(5), +w.lng.toFixed(5)]);
-  drawLine(i);
-  if (st.line.length === 2) st.lineMap.fitBounds(L.latLngBounds(st.line).pad(0.35), { maxZoom: 9 });
-}
-
 async function geocode(q) {
   const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
   const [hit] = await r.json();
   return hit || null;
 }
 
-async function handleImage(i, file) {
-  if (!file || !file.type.startsWith('image/')) { toast('That is not an image'); return; }
-  const st = state[i];
-  st.uploading = true; st.imageUrl = null;
-  f(i, 'droptext').textContent = 'Uploading…';
-  try {
-    const url = await uploadImage(file);
-    st.imageUrl = url;
-    const img = f(i, 'img'); img.src = url; img.classList.remove('hidden');
-    f(i, 'droptext').textContent = 'Image added. Tap to replace it.';
-  } catch (e) {
-    toast(e.message); f(i, 'droptext').textContent = 'Tap to choose a photo, or paste / drop an image here';
-  } finally { st.uploading = false; }
-}
-
-let lastFocused = 0;
-document.addEventListener('paste', (e) => {
-  const item = [...(e.clipboardData?.items || [])].find((x) => x.type.startsWith('image/'));
-  if (!item) return;
-  e.preventDefault();
-  setPic(lastFocused, 'image');
-  handleImage(lastFocused, item.getAsFile());
-});
-
-for (const i of [0, 1, 2]) {
-  $(`q${i}`).addEventListener('focusin', () => { lastFocused = i; });
-  $(`q${i}`).addEventListener('pointerdown', () => { lastFocused = i; });
-  f(i, 'picseg').querySelectorAll('button').forEach((b) => b.onclick = () => setPic(i, b.dataset.p));
-  f(i, 'file').onchange = (e) => handleImage(i, e.target.files[0]);
-  const drop = f(i, 'drop');
-  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
-  drop.ondragleave = () => drop.classList.remove('over');
-  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); handleImage(i, e.dataTransfer.files[0]); };
-  f(i, 'lclear').onclick = () => { state[i].line = []; if (state[i].lineMap) drawLine(i); };
-  const lsearch = async () => {
-    const q = f(i, 'lsearch').value.trim(); if (!q) return;
-    try {
-      const hit = await geocode(q);
-      if (!hit) { toast('No place found'); return; }
-      addLinePoint(i, [+hit.lat, +hit.lon]);
-      if (state[i].line.length === 1) state[i].lineMap.setView([+hit.lat, +hit.lon], 7);
-      f(i, 'lsearch').value = '';
-    } catch { toast('Search failed. Tap the map instead.'); }
-  };
-  f(i, 'lgo').onclick = lsearch;
-  f(i, 'lsearch').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); lsearch(); } };
+// Image link: preview it and check that it actually loads.
+function checkImage(i) {
+  const url = f(i, 'imgurl').value.trim();
+  const img = f(i, 'img'), hint = f(i, 'imghint');
+  state[i].imageOk = null;
+  if (!url) { img.classList.add('hidden'); hint.textContent = ''; state[i].imageOk = true; return; }
+  if (!/^https:\/\//i.test(url)) { img.classList.add('hidden'); hint.innerHTML = '<span class="error">Use a link starting with https://</span>'; state[i].imageOk = false; return; }
+  hint.textContent = 'Loading preview…';
+  img.onload = () => { if (f(i, 'imgurl').value.trim() !== url) return; img.classList.remove('hidden'); hint.textContent = 'Looks good. Tip: links from Wikipedia/Wikimedia or your own sites are the most reliable.'; state[i].imageOk = true; };
+  img.onerror = () => { if (f(i, 'imgurl').value.trim() !== url) return; img.classList.add('hidden'); hint.innerHTML = '<span class="error">That link doesn’t load as an image. Make sure it points to the image itself (often ends in .jpg/.png).</span>'; state[i].imageOk = false; };
+  img.src = url;
 }
 
 for (const i of [0, 1, 2]) {
   const el = $(`q${i}`);
-  el.querySelectorAll('.seg button').forEach((b) => b.onclick = () => setKind(i, b.dataset.k));
+  f(i, 'kindseg').querySelectorAll('button').forEach((b) => b.onclick = () => setKind(i, b.dataset.k));
   ['answer', 'unit', 'abstol'].forEach((n) => f(i, n).addEventListener('input', () => updatePreview(i)));
+  f(i, 'imgurl').addEventListener('input', () => checkImage(i));
   f(i, 'scoring').addEventListener('change', () => updatePreview(i));
   f(i, 'go').onclick = () => search(i);
   f(i, 'search').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(i); } };
   setKind(i, i === 2 ? 'map' : 'number');
-  setPic(i, 'none');
 }
 
 async function loadQueue() {
@@ -333,10 +246,10 @@ function collect() {
       if (prompt.length < 3) throw new Error(`Question ${i + 1} needs a question text`);
       const fact = f(i, 'fact').value.trim();
       const st = state[i];
-      if (st.uploading) throw new Error(`Question ${i + 1}: the image is still uploading`);
-      if (st.pic === 'image' && !st.imageUrl) throw new Error(`Question ${i + 1}: add an image or pick "None"`);
-      if (st.pic === 'line' && st.line.length !== 2) throw new Error(`Question ${i + 1}: the map line needs two points`);
-      const pic = st.pic === 'image' ? { image_url: st.imageUrl } : st.pic === 'line' ? { line: st.line } : {};
+      const imageUrl = f(i, 'imgurl').value.trim();
+      if (imageUrl && st.imageOk === false) throw new Error(`Question ${i + 1}: the image link doesn't work (clear it or fix it)`);
+      if (imageUrl && st.imageOk === null) throw new Error(`Question ${i + 1}: the image is still loading, try again in a second`);
+      const pic = imageUrl ? { image_url: imageUrl } : {};
       if (state[i].kind === 'map') {
         if (state[i].lat === null) throw new Error(`Question ${i + 1}: tap the map to set the correct spot`);
         return { kind: 'map', prompt, lat: state[i].lat, lng: state[i].lng, label: f(i, 'label').value.trim(), tolerance: +f(i, 'radius').value, fact, ...pic };

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ballpark · Office screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  /* Sized for a 16:9 screen: everything scales with the viewport. */
+  html { font-size: min(1.05vw, 1.87vh); }
+  body { height: 100vh; overflow: hidden; }
+  .screen { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; gap: 1.6rem; padding: 2rem 2.4rem; }
+
+  header { display: flex; align-items: center; justify-content: space-between; }
+  header .logo { font-size: 3.6rem; }
+  header .meta { text-align: right; }
+  header .date { font-size: 1.9rem; font-weight: 700; }
+  header .sub { font-size: 1.15rem; color: var(--muted); }
+
+  .main { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.6rem; min-height: 0; }
+  .col { display: grid; gap: 1.2rem; min-height: 0; }
+  .left { grid-template-rows: auto 1fr auto; }
+  .right { grid-template-rows: auto 1fr; }
+
+  .section-title { display: flex; align-items: baseline; justify-content: space-between; font-size: 1.15rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
+  .section-title b { color: var(--ink); }
+
+  .questions { display: grid; grid-template-rows: repeat(3, 1fr); gap: 1rem; min-height: 0; }
+  .q { background: var(--panel); border-radius: var(--radius); padding: 1.3rem 1.6rem; display: grid; grid-template-columns: 4.2rem 1fr; gap: 1.4rem; align-items: center; position: relative; overflow: hidden; }
+  .q .n { font-size: 3.6rem; font-weight: 800; color: var(--accent); line-height: 1; text-align: center; }
+  .q .prompt { font-size: 1.95rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
+  .q .prompt .tag { font-size: 1rem; vertical-align: .45em; margin-left: .3rem; white-space: nowrap; }
+
+  .answered { background: var(--panel); border-radius: var(--radius); padding: .8rem 1.2rem; display: flex; gap: 1rem; align-items: center; height: 5rem; overflow: hidden; }
+  .answered .names { flex: 1; min-width: 0; display: flex; gap: .6rem; align-items: center; white-space: nowrap; overflow: hidden; }
+  .answered .count { font-size: 1.6rem; font-weight: 800; color: var(--mint); margin-right: .4rem; }
+  .chip { background: var(--panel-2); border-radius: 999px; padding: .3rem .8rem; font-size: 1.05rem; font-weight: 600; animation: pop .4s ease; }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+
+  .qr-card { background: var(--ink); color: var(--bg); border-radius: var(--radius); padding: 1.3rem; display: grid; grid-template-columns: auto 1fr; gap: 1.4rem; align-items: center; }
+  .qr-card .qr { width: 11rem; height: 11rem; background: #fff; border-radius: 10px; padding: .5rem; display: grid; place-items: center; }
+  .qr-card .qr svg, .qr-card .qr img { width: 100%; height: 100%; }
+  .qr-card h2 { margin: 0; font-size: 2.6rem; line-height: 1; letter-spacing: -0.03em; }
+  .qr-card p { margin: .5rem 0 0; font-size: 1.15rem; font-weight: 600; opacity: .75; }
+  .qr-card .url { font-family: var(--mono); font-size: .95rem; margin-top: .6rem; word-break: break-all; opacity: .6; }
+
+  .board { background: var(--panel); border-radius: var(--radius); padding: 1.3rem 1.5rem; display: grid; grid-template-rows: auto 1fr; gap: .8rem; min-height: 0; overflow: hidden; }
+  .board table { width: 100%; border-collapse: collapse; font-size: 1.35rem; }
+  .board td { padding: .42rem 0; border-bottom: 1px solid var(--line); }
+  .board tr:last-child td { border-bottom: 0; }
+  .board .rank { width: 2.6rem; font-weight: 800; color: var(--muted); }
+  .board tr:nth-child(1) .rank { color: var(--gold); }
+  .board tr:nth-child(2) .rank { color: #d9dde8; }
+  .board tr:nth-child(3) .rank { color: #e0a27a; }
+  .board .name { font-weight: 700; }
+  .board .days { color: var(--muted); font-size: 1rem; text-align: right; padding-right: 1.2rem; }
+  .board .pts { text-align: right; font-weight: 700; }
+  #board { min-height: 0; overflow: hidden; }
+  .empty { color: var(--muted); font-size: 1.3rem; align-self: center; text-align: center; padding: 1rem; }
+
+  .results { display: grid; gap: 1rem; }
+  .results-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; height: 11rem; }
+  .r { background: var(--panel); border-radius: var(--radius); padding: 1.1rem 1.3rem; display: grid; grid-template-rows: auto auto 1fr; gap: .4rem; overflow: hidden; position: relative; }
+  .r .rq { font-size: 1.05rem; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r .ans { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; color: var(--gold); }
+  .r .ans small { font-size: 1.2rem; color: var(--muted); font-weight: 600; margin-left: .3rem; }
+  .r .best { font-size: 1.1rem; font-weight: 600; }
+  .r .best b { color: var(--mint); }
+  .r .fact { font-size: 1rem; color: var(--muted); align-self: end; }
+  .r.map { grid-template-columns: 1fr 13rem; grid-template-rows: auto auto auto 1fr; column-gap: 1rem; }
+  .r.map > :not(.mini) { grid-column: 1; }
+  .r.map .ans { font-size: 1.7rem; }
+  .r .mini { grid-column: 2; grid-row: 1 / -1; border-radius: 12px; overflow: hidden; }
+  .r .mini .leaflet-control-attribution { font-size: 7px; }
+  .winner { color: var(--gold); }
+
+  .nothing { grid-column: 1 / -1; display: grid; place-items: center; text-align: center; background: var(--panel); border-radius: var(--radius); padding: 2rem; }
+  .nothing h2 { font-size: 3.4rem; margin: 0 0 .6rem; letter-spacing: -0.03em; }
+  .nothing p { font-size: 1.5rem; color: var(--muted); margin: 0; }
+
+  .add-hint { display: flex; gap: .8rem; flex: none; white-space: nowrap; align-items: center; font-size: 1.05rem; color: var(--muted); }
+  .add-hint .qr-small { width: 3.4rem; height: 3.4rem; background: #fff; border-radius: 8px; padding: .25rem; flex: none; }
+  .add-hint .qr-small svg, .add-hint .qr-small img { width: 100%; height: 100%; }
+  .add-hint b { color: var(--ink); }
+
+  /* ===== Portrait (e.g. 1080×1920): stack the columns ===== */
+  @media (orientation: portrait) {
+    html { font-size: min(1.9vw, 1.07vh); }
+    .screen { padding: 2.2rem 2rem; gap: 1.4rem; }
+    header .logo { font-size: 3.4rem; }
+    header .date { font-size: 1.8rem; }
+    .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; gap: 1.4rem; }
+    .q { padding: 1.1rem 1.4rem; }
+    .q .prompt { font-size: 2.1rem; }
+    .right { grid-template-columns: 1fr 1.25fr; grid-template-rows: 23rem; gap: 1.2rem; }
+    .qr-card { grid-template-columns: 1fr; grid-template-rows: auto 1fr; justify-items: center; text-align: center; gap: 1rem; padding: 1.4rem 1.2rem; }
+    .qr-card .qr { width: 12.5rem; height: 12.5rem; }
+    .qr-card h2 { font-size: 2.3rem; }
+    .qr-card p { font-size: 1.05rem; }
+    .qr-card .url { display: none; }
+    .board table { font-size: 1.3rem; }
+    .board td { padding: .32rem 0; }
+    .results-grid { grid-template-columns: 1fr; grid-auto-rows: 7rem; height: auto; gap: .8rem; }
+    .r { grid-template-columns: 1fr; grid-template-rows: auto auto auto; padding: .9rem 1.3rem; gap: .25rem; }
+    .r .ans { font-size: 2.2rem; }
+    .r .fact { display: none; }
+    .r.map { grid-template-columns: 1fr 14rem; grid-template-rows: auto auto 1fr; }
+    .r.map .ans { font-size: 1.8rem; }
+    .nothing h2 { font-size: 3rem; }
+  }
+
+  .offline { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: .4rem 1rem; border-radius: 999px; font-size: 1rem; font-weight: 700; display: none; }
+</style>
+</head>
+<body>
+<div class="offline" id="offline">Reconnecting…</div>
+<div class="screen">
+  <header>
+    <div class="logo" id="logo"></div>
+    <div class="meta">
+      <div class="date" id="date"></div>
+      <div class="sub" id="sub"></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="col left">
+      <div class="section-title"><span>Today's questions</span><span id="author"></span></div>
+      <div class="questions" id="questions"></div>
+      <div class="answered" id="answered"></div>
+    </div>
+    <div class="col right">
+      <div class="qr-card">
+        <div class="qr" id="qr"></div>
+        <div>
+          <h2>Scan to play</h2>
+          <p>Answer all three on your phone. Closest guesses score up to 10 000 points each.</p>
+          <div class="url" id="playUrl"></div>
+        </div>
+      </div>
+      <div class="board">
+        <div class="section-title"><span id="boardTitle">Standings</span><span>points</span></div>
+        <div id="board"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="results">
+    <div class="section-title"><span id="resultsTitle">Yesterday's answers</span><span id="winner" class="winner"></span></div>
+    <div class="results-grid" id="results"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script type="module">
+import { CONFIG } from './config.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl } from './common.js';
+
+const $ = (id) => document.getElementById(id);
+$('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
+document.title = `${CONFIG.title} · Office screen`;
+$('sub').textContent = CONFIG.tagline;
+
+function qrSvg(text) {
+  if (typeof qrcode !== 'function') return `<div style="font:700 12px var(--mono);color:#000;text-align:center">QR unavailable</div>`;
+  const q = qrcode(0, 'M'); q.addData(text); q.make();
+  return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+}
+const playUrl = pageUrl('play.html');
+const addUrl = pageUrl('add.html');
+$('qr').innerHTML = qrSvg(playUrl);
+$('playUrl').textContent = playUrl.replace(/^https?:\/\//, '');
+
+let today = null;
+let lastAnsweredCount = '';
+let maps = [];
+
+function renderToday(t) {
+  $('date').textContent = fmtDate(t.date);
+  const qs = t.questions || [];
+  if (!qs.length) {
+    $('author').textContent = '';
+    $('questions').innerHTML = `<div class="nothing">
+      <div>
+        <h2>${t.weekend ? 'It’s the weekend!' : 'The question queue is empty'}</h2>
+        <p>${t.weekend ? 'New questions on Monday morning.' : 'Be the hero: add three questions for tomorrow.'}</p>
+        <div class="add-hint" style="justify-content:center;margin-top:1.4rem"><div class="qr-small">${qrSvg(addUrl)}</div><span>Scan to <b>add a question set</b></span></div>
+      </div></div>`;
+    $('answered').innerHTML = `<span class="muted" style="font-size:1.2rem">${t.queued ? `${t.queued} set${t.queued === 1 ? '' : 's'} waiting in the queue.` : 'No sets waiting in the queue.'}</span>`;
+    return;
+  }
+  $('author').innerHTML = `Questions by <b>${esc(t.author)}</b>`;
+  $('questions').innerHTML = qs.map((q) => `
+    <div class="q">
+      <div class="n">${q.position}</div>
+      <div>
+        <div class="prompt">${esc(q.prompt)} ${q.kind === 'map'
+          ? '<span class="tag map">📍 Map</span>'
+          : q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : ''}</div>
+      </div>
+    </div>`).join('');
+
+  const names = t.answered || [];
+  const key = `${names.length}|${t.queued}`;
+  if (key !== lastAnsweredCount) {
+    lastAnsweredCount = key;
+    const hint = t.queued <= 1
+      ? `<span class="add-hint"><span>${t.queued ? 'Only 1 set left' : 'Queue empty'} · <b>add questions</b></span><span class="qr-small">${qrSvg(addUrl)}</span></span>`
+      : '';
+    const chips = names.length
+      ? `<span class="count">${names.length}</span><span class="muted" style="font-size:1.1rem">answered:</span>` + names.slice().reverse().map((n) => `<span class="chip">${esc(n)}</span>`).join('')
+      : `<span class="muted" style="font-size:1.2rem">No answers yet. Be the first!</span>`;
+    $('answered').innerHTML = `<div class="names">${chips}</div>${hint}`;
+  }
+}
+
+function renderBoard(sb) {
+  const month = new Date(`${sb.month}-15T12:00:00`).toLocaleDateString('en-GB', { month: 'long' });
+  $('boardTitle').textContent = `${month} standings`;
+  const rows = (sb.rows || []).filter((r) => r.month_total > 0).slice(0, CONFIG.scoreboardSize);
+  if (!rows.length) {
+    $('board').innerHTML = `<div class="empty">No points yet this month.<br>First results land tomorrow morning.</div>`;
+    return;
+  }
+  $('board').innerHTML = `<table>${rows.map((r, i) => `
+    <tr><td class="rank">${i + 1}</td><td class="name">${esc(r.player)}</td>
+    <td class="days">${r.month_days} day${r.month_days === 1 ? '' : 's'}</td>
+    <td class="pts num">${fmt(r.month_total)}</td></tr>`).join('')}</table>`;
+  fitBoard();
+}
+
+// Drop rows that don't fully fit, so the board never shows a half-cut row.
+function fitBoard() {
+  const box = $('board');
+  const rows = box.querySelectorAll('tr');
+  for (let i = rows.length - 1; i > 0 && box.scrollHeight > box.clientHeight + 1; i--) rows[i].remove();
+}
+window.addEventListener('resize', () => safely(refreshAll));
+
+function renderResults(res) {
+  maps.forEach((m) => m.remove()); maps = [];
+  if (!res || !res.questions) {
+    $('resultsTitle').textContent = 'Results';
+    $('winner').textContent = '';
+    $('results').innerHTML = `<div class="nothing"><p>Answers and points from today show up here tomorrow morning.</p></div>`;
+    return;
+  }
+  $('resultsTitle').textContent = `Answers · ${fmtDate(res.date)}`;
+  const top = res.players?.[0];
+  $('winner').innerHTML = top
+    ? `🏆 ${esc(top.player)} · <span class="num">${fmtPts(top.total)}</span> <span class="muted">(${res.players.length} played)</span>`
+    : '<span class="muted">Nobody played</span>';
+  $('results').innerHTML = res.questions.map((q) => {
+    const b = q.best;
+    if (q.kind === 'map') {
+      const km = b ? distanceKm(q.answer_lat, q.answer_lng, b.lat, b.lng) : null;
+      return `<div class="r map">
+        <div class="rq">${q.position}. ${esc(q.prompt)}</div>
+        <div class="ans">${esc(q.answer_label || 'See the map')}</div>
+        <div class="best">${b ? `Closest: <b>${esc(b.player)}</b>, <span class="num">${fmt(Math.round(km))}</span> km away` : ''}</div>
+        <div class="fact">${esc(q.fact || '')}</div>
+        <div class="mini" id="mini-${q.id}"></div>
+      </div>`;
+    }
+    return `<div class="r">
+      <div class="rq">${q.position}. ${esc(q.prompt)}</div>
+      <div class="ans num">${fmt(q.answer_num)}<small>${esc(q.unit || '')}</small></div>
+      <div class="best">${b ? `Closest: <b>${esc(b.player)}</b> guessed <span class="num">${fmt(b.guess)}</span> · ${fmtPts(b.points)}` : ''}</div>
+      <div class="fact">${esc(q.fact || '')}</div>
+    </div>`;
+  }).join('');
+
+  if (typeof L === 'undefined') return;
+  for (const q of res.questions.filter((x) => x.kind === 'map')) {
+    const m = makeMap($(`mini-${q.id}`), { tiles: 'dark', interactive: false });
+    const pts = [[q.answer_lat, q.answer_lng]];
+    for (const p of res.players || []) {
+      const g = p.guesses.find((x) => x.question_id === q.id);
+      if (g && g.lat != null) { L.marker([g.lat, g.lng], { icon: dot('#5ee0b1', 9) }).addTo(m); pts.push([g.lat, g.lng]); }
+    }
+    L.marker([q.answer_lat, q.answer_lng], { icon: pin('#ffd166', 20) }).addTo(m);
+    m.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 6 });
+    maps.push(m);
+  }
+}
+
+async function refreshToday() {
+  const t = await rpc('quiz_today');
+  if (today && t.date !== today.date) { location.reload(); return; }
+  today = t;
+  renderToday(t);
+}
+
+async function refreshAll() {
+  const [t, sb, res] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard'), rpc('quiz_results')]);
+  today = t; lastAnsweredCount = '';
+  renderToday(t); renderBoard(sb); renderResults(res);
+}
+
+async function safely(fn) {
+  try { await fn(); $('offline').style.display = 'none'; }
+  catch (e) { console.error(e); $('offline').style.display = 'block'; }
+}
+
+safely(refreshAll);
+setInterval(() => safely(refreshToday), 20_000);       // new answers
+setInterval(() => safely(refreshAll), 10 * 60_000);    // board + results
+// Full reload a few times a day keeps a long-running TV browser healthy
+setTimeout(() => location.reload(), 6 * 60 * 60_000);
+</script>
+</body>
+</html>

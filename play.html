@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11131a">
+<title>Ballpark · Play</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  body { font-size: 17px; min-height: 100dvh; }
+  .app { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .top .logo { font-size: 26px; }
+  .top .who { font-size: 14px; color: var(--muted); text-align: right; }
+  .top .who button { background: none; border: 0; color: var(--mint); padding: 0; cursor: pointer; text-decoration: underline; }
+
+  .card { background: var(--panel); border-radius: var(--radius); padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  h1 { font-size: 30px; line-height: 1.1; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  p { margin: 0; line-height: 1.45; }
+
+  .progress { display: flex; gap: 6px; }
+  .progress span { flex: 1; height: 6px; border-radius: 3px; background: var(--panel-2); }
+  .progress span.on { background: var(--accent); }
+  .progress span.done { background: var(--mint); }
+
+  .qnum { color: var(--accent); font-weight: 800; font-size: 15px; text-transform: uppercase; letter-spacing: .1em; }
+  .prompt { font-size: 25px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+
+  .numwrap { display: flex; align-items: center; background: var(--panel-2); border-radius: 14px; border: 2px solid transparent; }
+  .numwrap:focus-within { border-color: var(--accent); }
+  .numwrap input { flex: 1; min-width: 0; background: none; border: 0; outline: none; padding: 16px; font-family: var(--mono); font-size: 28px; }
+  .numwrap .unit { padding-right: 16px; color: var(--muted); font-weight: 600; }
+  .preview { font-size: 14px; color: var(--muted); min-height: 1.2em; }
+  .preview b { color: var(--ink); font-family: var(--mono); }
+
+  .map { height: 52vh; min-height: 300px; border-radius: 14px; overflow: hidden; }
+  .maphint { font-size: 14px; color: var(--muted); }
+
+  .nav { display: grid; grid-template-columns: auto 1fr; gap: 10px; }
+  .review { display: grid; gap: 10px; }
+  .review .row { background: var(--panel-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; cursor: pointer; }
+  .review .row .p { font-size: 14px; color: var(--muted); }
+  .review .row .a { font-weight: 700; font-family: var(--mono); }
+
+  .big-emoji { font-size: 56px; line-height: 1; }
+  .center { text-align: center; justify-items: center; }
+
+  .yest .line { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .yest .line:last-child { border-bottom: 0; }
+  .yest .line .pts { font-family: var(--mono); font-weight: 700; color: var(--mint); white-space: nowrap; }
+  .yest .total { font-size: 28px; font-weight: 800; font-family: var(--mono); color: var(--gold); }
+  .links { display: flex; justify-content: center; gap: 18px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="logo" id="logo"></div>
+    <div class="who" id="who"></div>
+  </div>
+  <div id="view"><div class="card"><p class="muted">Loading today's questions…</p></div></div>
+  <div id="yesterday"></div>
+  <div class="links"><a href="add.html">＋ Add your own questions</a></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { CONFIG } from './config.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, distanceKm, store } from './common.js';
+
+const $ = (id) => document.getElementById(id);
+$('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
+document.title = `${CONFIG.title} · Play`;
+
+let today = null;
+let step = 0;               // 0..2 questions, 3 = review
+let answers = {};           // question_id -> {value} | {lat,lng}
+let maps = {};
+let name = store.get('bp_name') || '';
+
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 4000);
+}
+
+function renderWho() {
+  $('who').innerHTML = name ? `Playing as <b>${esc(name)}</b><br><button id="chg">Not you?</button>` : '';
+  const b = $('chg'); if (b) b.onclick = () => { name = ''; store.del('bp_name'); renderWho(); route(); };
+}
+
+const draftKey = () => `bp_draft_${today.date}`;
+const doneKey = () => `bp_done_${today.date}_${name.toLowerCase()}`;
+const saveDraft = () => store.set(draftKey(), JSON.stringify(answers));
+
+function route() {
+  renderWho();
+  const qs = today.questions || [];
+  if (!qs.length) return viewClosed();
+  if (!name) return viewName();
+  if (today.author && today.author.trim().toLowerCase() === name.toLowerCase()) return viewOwn();
+  if (store.get(doneKey()) || (today.answered || []).some((n) => n.toLowerCase() === name.toLowerCase())) return viewDone();
+  if (step < 3) return viewQuestion(step);
+  return viewReview();
+}
+
+function viewClosed() {
+  $('view').innerHTML = `<div class="card center">
+    <div class="big-emoji">${today.weekend ? '🏖️' : '📭'}</div>
+    <h1>${today.weekend ? 'Enjoy the weekend' : 'No questions today'}</h1>
+    <p class="muted">${today.weekend ? 'New questions on Monday morning.' : 'The queue is empty. Why not add a set of three for tomorrow?'}</p>
+    <a class="btn block" href="add.html" style="text-decoration:none;text-align:center">Add questions</a>
+  </div>`;
+}
+
+function viewName() {
+  $('view').innerHTML = `<div class="card">
+    <h1>Today's three questions</h1>
+    <p class="muted">${fmtDate(today.date)} · questions by ${esc(today.author)}. Every answer scores 1 to 10 000 points depending on how close you get. Results show on the office screen tomorrow.</p>
+    <label class="field"><span>Your name (shown on the scoreboard)</span>
+      <input class="input" id="name" maxlength="30" autocomplete="given-name" placeholder="e.g. Anna S" value="${esc(name)}"></label>
+    <button class="btn block" id="go">Let's go</button>
+  </div>`;
+  const go = () => {
+    const v = $('name').value.trim();
+    if (!v) { $('name').focus(); return; }
+    name = v; store.set('bp_name', v); route();
+  };
+  $('go').onclick = go;
+  $('name').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+}
+
+function viewOwn() {
+  $('view').innerHTML = `<div class="card center">
+    <div class="big-emoji">🤫</div>
+    <h1>These are your questions!</h1>
+    <p class="muted">You wrote today's set, so sit this one out and enjoy watching everyone guess. See you tomorrow.</p>
+  </div>`;
+}
+
+function viewDone() {
+  $('view').innerHTML = `<div class="card center">
+    <div class="big-emoji">🎯</div>
+    <h1>Locked in!</h1>
+    <p class="muted">Your answers for ${fmtDate(today.date)} are saved. The correct answers and your points appear on the office screen tomorrow morning.</p>
+  </div>`;
+}
+
+function progress(i) {
+  return `<div class="progress">${[0, 1, 2].map((k) => `<span class="${k < i ? 'done' : k === i ? 'on' : ''}"></span>`).join('')}</div>`;
+}
+
+function answerText(q) {
+  const a = answers[q.id];
+  if (!a) return '—';
+  if (q.kind === 'map') return `📍 ${a.lat.toFixed(3)}, ${a.lng.toFixed(3)}`;
+  return `${fmt(a.value)}${q.unit ? ` ${esc(q.unit)}` : ''}`;
+}
+
+function viewQuestion(i) {
+  const q = today.questions[i];
+  const a = answers[q.id];
+  const body = q.kind === 'map'
+    ? `<div class="map" id="map-${q.id}"></div><div class="maphint" id="maphint">${a ? 'Pin placed. Tap again to move it.' : 'Tap the map to drop your pin. Pinch to zoom.'}</div>`
+    : `<div class="numwrap"><input id="num" inputmode="decimal" autocomplete="off" placeholder="Your guess" value="${a ? esc(String(a.raw ?? a.value)) : ''}">${q.unit ? `<span class="unit">${esc(q.unit)}</span>` : ''}</div>
+       <div class="preview" id="preview"></div>`;
+  $('view').innerHTML = `<div class="card">
+    ${progress(i)}
+    <div class="qnum">Question ${i + 1} of 3</div>
+    <div class="prompt">${esc(q.prompt)}</div>
+    ${body}
+    <div class="nav">
+      <button class="btn ghost" id="back" ${i === 0 ? 'disabled' : ''}>Back</button>
+      <button class="btn" id="next">${i === 2 ? 'Review answers' : 'Next'}</button>
+    </div>
+  </div>`;
+
+  if (q.kind === 'map') {
+    if (typeof L === 'undefined') { $('maphint').innerHTML = '<span class="error">The map failed to load. Check your connection and reload.</span>'; }
+    else {
+      const m = makeMap($(`map-${q.id}`), { tiles: 'plain' });
+      let marker = null;
+      const place = (ll) => {
+        if (marker) marker.setLatLng(ll); else marker = L.marker(ll, { icon: pin('#ff7a3d', 26) }).addTo(m);
+        const w = L.latLng(ll).wrap();
+        answers[q.id] = { lat: w.lat, lng: w.lng }; saveDraft();
+        $('maphint').textContent = 'Pin placed. Tap again to move it.';
+      };
+      if (a) { marker = L.marker([a.lat, a.lng], { icon: pin('#ff7a3d', 26) }).addTo(m); m.setView([a.lat, a.lng], 4); }
+      m.on('click', (e) => place(e.latlng));
+      setTimeout(() => m.invalidateSize(), 50);
+    }
+  } else {
+    const input = $('num');
+    const upd = () => {
+      const v = parseNumber(input.value);
+      $('preview').innerHTML = !input.value.trim() ? 'Tip: you can type 1.5k, 3m or 2bn'
+        : v === null ? '<span class="error">That doesn’t look like a number</span>'
+        : `Your guess: <b>${fmt(v)}</b>${q.unit ? ` ${esc(q.unit)}` : ''}`;
+      if (v !== null) { answers[q.id] = { value: v, raw: input.value }; saveDraft(); }
+      else delete answers[q.id];
+    };
+    input.oninput = upd; upd();
+    input.onkeydown = (e) => { if (e.key === 'Enter') $('next').click(); };
+    setTimeout(() => input.focus(), 50);
+  }
+
+  $('back').onclick = () => { step = Math.max(0, i - 1); route(); };
+  $('next').onclick = () => {
+    if (!answers[q.id]) { toast(q.kind === 'map' ? 'Drop a pin on the map first' : 'Enter a number first'); return; }
+    step = i + 1; route(); window.scrollTo(0, 0);
+  };
+}
+
+function viewReview() {
+  const qs = today.questions;
+  $('view').innerHTML = `<div class="card">
+    ${progress(3)}
+    <h2>Happy with these?</h2>
+    <div class="review">${qs.map((q, i) => `<div class="row" data-i="${i}"><div class="p">${i + 1}. ${esc(q.prompt)}</div><div class="a">${answerText(q)}</div></div>`).join('')}</div>
+    <p class="muted" style="font-size:14px">Tap an answer to change it. You can only submit once per day.</p>
+    <button class="btn block" id="submit">Lock in my answers</button>
+  </div>`;
+  document.querySelectorAll('.review .row').forEach((r) => r.onclick = () => { step = +r.dataset.i; route(); });
+  $('submit').onclick = async () => {
+    const missing = qs.findIndex((q) => !answers[q.id]);
+    if (missing >= 0) { step = missing; route(); return; }
+    $('submit').disabled = true; $('submit').textContent = 'Submitting…';
+    try {
+      const payload = qs.map((q) => ({ question_id: q.id, ...(q.kind === 'map' ? { lat: answers[q.id].lat, lng: answers[q.id].lng } : { value: answers[q.id].value }) }));
+      await rpc('quiz_submit', { p_player: name, p_answers: payload });
+      store.set(doneKey(), '1'); store.del(draftKey());
+      viewDone();
+    } catch (e) {
+      toast(e.message);
+      $('submit').disabled = false; $('submit').textContent = 'Lock in my answers';
+    }
+  };
+}
+
+async function loadYesterday() {
+  try {
+    const res = await rpc('quiz_results');
+    if (!res || !name) return;
+    const idx = (res.players || []).findIndex((p) => p.player.toLowerCase() === name.toLowerCase());
+    if (idx < 0) return;
+    const me = res.players[idx];
+    const lines = res.questions.map((q) => {
+      const g = me.guesses.find((x) => x.question_id === q.id);
+      const correct = q.kind === 'map' ? esc(q.answer_label || 'the pin') : `${fmt(q.answer_num)} ${esc(q.unit || '')}`;
+      const yours = q.kind === 'map' ? `${fmt(Math.round(distanceKm(q.answer_lat, q.answer_lng, g.lat, g.lng)))} km off` : `you said ${fmt(g.guess)}`;
+      return `<div class="line"><span>${q.position}. ${correct}<br><span class="muted">${yours}</span></span><span class="pts">${fmtPts(g.points)}</span></div>`;
+    }).join('');
+    $('yesterday').innerHTML = `<div class="card yest">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Your ${fmtDate(res.date, { weekday: 'long' })}</h2><span class="muted">#${idx + 1} of ${res.players.length}</span></div>
+      <div class="total">${fmtPts(me.total)}</div>
+      <div>${lines}</div>
+    </div>`;
+  } catch (e) { console.error(e); }
+}
+
+async function init() {
+  try {
+    today = await rpc('quiz_today');
+    try { answers = JSON.parse(store.get(`bp_draft_${today.date}`) || '{}'); } catch { answers = {}; }
+    route();
+    loadYesterday();
+  } catch (e) {
+    $('view').innerHTML = `<div class="card"><p class="error">Couldn't load today's questions: ${esc(e.message)}</p><button class="btn" onclick="location.reload()">Try again</button></div>`;
+  }
+}
+init();
+</script>
+</body>
+</html>

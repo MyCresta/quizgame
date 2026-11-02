@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11131a">
+<title>Ballpark · Add questions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  body { font-size: 16px; }
+  .app { max-width: 640px; margin: 0 auto; padding: 16px 16px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .top { display: flex; align-items: center; justify-content: space-between; }
+  .top .logo { font-size: 26px; }
+  .top a { font-size: 15px; }
+  .card { background: var(--panel); border-radius: var(--radius); padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  h1 { font-size: 30px; line-height: 1.1; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 10px; }
+  h2 .n { color: var(--accent); font-weight: 800; }
+  p { margin: 0; line-height: 1.45; }
+  .queue { font-size: 14px; color: var(--muted); }
+  .queue b { color: var(--ink); }
+
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--panel-2); border-radius: 12px; padding: 4px; gap: 4px; }
+  .seg button { border: 0; background: none; padding: 10px; border-radius: 9px; font-weight: 700; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--ink); color: var(--bg); }
+  .row2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
+  select.input { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 18px) 55%, calc(100% - 13px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 32px; }
+  .hint { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .scoreprev { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .scoreprev div { background: var(--panel-2); border-radius: 10px; padding: 8px; font-size: 12px; color: var(--muted); text-align: center; }
+  .scoreprev b { display: block; color: var(--ink); font-family: var(--mono); font-size: 14px; margin-top: 2px; }
+  .map { height: 320px; border-radius: 12px; overflow: hidden; }
+  .search { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .search .btn { padding: .7em 1em; }
+  .hidden { display: none !important; }
+  .ideas { font-size: 14px; color: var(--muted); padding-left: 1.1em; margin: 0; line-height: 1.6; }
+  @media (max-width: 480px) { [data-part="map"] .row2 { grid-template-columns: 1fr; } }
+  .success { text-align: center; justify-items: center; }
+  .success .big { font-size: 56px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="logo" id="logo"></div>
+    <a href="play.html">Play today's quiz →</a>
+  </div>
+
+  <div id="form">
+    <div class="card" style="margin-bottom:18px">
+      <h1>Add a question set</h1>
+      <p class="muted">Write three questions. They go into the queue and get played on the next free weekday. Every answer is a guess on a range, so the closer people get, the more points (1 to 10 000 each).</p>
+      <ul class="ideas">
+        <li>Distance between two of our offices, in km</li>
+        <li>World records, heights, speeds, populations</li>
+        <li>Perspective-givers: rolls of toilet paper per lifetime, coffees the office drinks per year…</li>
+        <li>Pin a place on the map: where's our newest client, a landmark, a holiday spot</li>
+      </ul>
+      <div class="queue" id="queue"></div>
+      <label class="field"><span>Your name</span><input class="input" id="author" maxlength="40" placeholder="Shown on the screen as the author"></label>
+    </div>
+    <div id="qs" style="display:grid;gap:18px"></div>
+    <div class="card" style="margin-top:18px">
+      <p class="hint">You can't answer your own set on the day it runs (we check your name). Answers stay secret until the morning after.</p>
+      <button class="btn block" id="submit">Add to the queue</button>
+    </div>
+  </div>
+  <div id="done" class="hidden"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { CONFIG } from './config.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, points, store } from './common.js';
+
+const $ = (id) => document.getElementById(id);
+$('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
+document.title = `${CONFIG.title} · Add questions`;
+$('author').value = store.get('bp_author') || store.get('bp_name') || '';
+
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 4500);
+}
+
+const SCORING = [
+  { id: 'r1', label: 'Ballpark: 10× off scores 1 point', scoring: 'ratio', tol: 1 },
+  { id: 'r05', label: 'Tight: ~3× off scores 1 point', scoring: 'ratio', tol: 0.5 },
+  { id: 'r2', label: 'Loose: 100× off scores 1 point', scoring: 'ratio', tol: 2 },
+  { id: 'abs', label: 'Plain difference (years, temperatures…)', scoring: 'absolute' },
+];
+const RADIUS = [[300, 'Within 300 km (same region)'], [1000, 'Within 1 000 km (same country-ish)'], [2000, 'Within 2 000 km (same continent)'], [5000, 'Within 5 000 km (rough area of the world)']];
+
+const state = [0, 1, 2].map(() => ({ kind: 'number', lat: null, lng: null, map: null, marker: null }));
+
+function block(i) {
+  return `<div class="card" id="q${i}">
+    <h2><span class="n">${i + 1}</span> Question ${i + 1}</h2>
+    <div class="seg"><button data-k="number" class="on"># Number</button><button data-k="map">📍 Map pin</button></div>
+    <label class="field"><span>Question</span><textarea class="input" data-f="prompt" maxlength="300" placeholder=""></textarea></label>
+
+    <div data-part="number" style="display:grid;gap:14px">
+      <div class="row2">
+        <label class="field"><span>Correct answer</span><input class="input num" data-f="answer" inputmode="decimal" placeholder="e.g. 398"></label>
+        <label class="field"><span>Unit (optional)</span><input class="input" data-f="unit" maxlength="30" placeholder="km, rolls, years…"></label>
+      </div>
+      <div class="hint" data-f="answerPreview"></div>
+      <label class="field"><span>How strict is the scoring?</span>
+        <select class="input" data-f="scoring">${SCORING.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join('')}</select></label>
+      <label class="field hidden" data-part="abs"><span>1 point if the guess is off by</span><input class="input num" data-f="abstol" inputmode="decimal" placeholder="e.g. 50"></label>
+      <div class="scoreprev" data-f="prev"></div>
+    </div>
+
+    <div data-part="map" class="hidden" style="display:grid;gap:12px">
+      <div class="search"><input class="input" data-f="search" placeholder="Search a place to jump there"><button class="btn ghost" data-f="go">Find</button></div>
+      <div class="map" data-f="map"></div>
+      <div class="hint" data-f="maphint">Tap the map to place the correct spot. Players see a map without labels.</div>
+      <div class="row2">
+        <label class="field"><span>Name of the place (shown with the answer)</span><input class="input" data-f="label" maxlength="80" placeholder="e.g. Our Gothenburg office"></label>
+        <label class="field"><span>1 point if further than</span><select class="input" data-f="radius">${RADIUS.map(([v, l]) => `<option value="${v}" ${v === 2000 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      </div>
+    </div>
+
+    <label class="field"><span>Fun fact for the reveal (optional)</span><input class="input" data-f="fact" maxlength="300" placeholder="Shown on the screen with the answer"></label>
+  </div>`;
+}
+
+$('qs').innerHTML = [0, 1, 2].map(block).join('');
+const placeholders = ['How far is it between our Stockholm and Gothenburg offices?', 'How many rolls of toilet paper does a person use in a lifetime?', 'Where is our newest client based?'];
+
+function f(i, name) { return $(`q${i}`).querySelector(`[data-f="${name}"]`); }
+
+function updatePreview(i) {
+  const ans = parseNumber(f(i, 'answer').value);
+  const unit = f(i, 'unit').value.trim();
+  f(i, 'answerPreview').innerHTML = ans === null ? (f(i, 'answer').value ? '<span class="error">Not a number</span>' : '') : `Answer: <b class="num">${fmt(ans)}</b> ${esc(unit)}`;
+  const s = SCORING.find((x) => x.id === f(i, 'scoring').value);
+  $(`q${i}`).querySelector('[data-part="abs"]').classList.toggle('hidden', s.scoring !== 'absolute');
+  const prev = f(i, 'prev');
+  if (ans === null) { prev.innerHTML = ''; return; }
+  let cases;
+  if (s.scoring === 'ratio') {
+    cases = [[ans * 1.1, '10% off'], [ans * 2, 'Double'], [ans * 5, '5× off']];
+    prev.innerHTML = cases.map(([g, l]) => `<div>${l}<b>${fmtPts(points('ratio', s.tol, ans, g))}</b></div>`).join('');
+  } else {
+    const tol = parseNumber(f(i, 'abstol').value);
+    if (!(tol > 0)) { prev.innerHTML = ''; return; }
+    cases = [tol * 0.1, tol * 0.25, tol * 0.5];
+    prev.innerHTML = cases.map((d) => `<div>Off by ${fmt(d)}<b>${fmtPts(points('absolute', tol, ans, ans + d))}</b></div>`).join('');
+  }
+}
+
+function setKind(i, kind) {
+  state[i].kind = kind;
+  const el = $(`q${i}`);
+  el.querySelectorAll('.seg button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind));
+  el.querySelector('[data-part="number"]').classList.toggle('hidden', kind !== 'number');
+  el.querySelector('[data-part="map"]').classList.toggle('hidden', kind !== 'map');
+  f(i, 'prompt').placeholder = kind === 'map' ? 'e.g. Pin our newest office' : placeholders[i % 2];
+  if (kind === 'map') {
+    if (typeof L === 'undefined') { f(i, 'maphint').innerHTML = '<span class="error">The map failed to load. Check your connection.</span>'; return; }
+    if (!state[i].map) {
+      const m = makeMap(f(i, 'map'), { tiles: 'labels' });
+      m.on('click', (e) => place(i, e.latlng));
+      state[i].map = m;
+    }
+    setTimeout(() => state[i].map.invalidateSize(), 50);
+  }
+}
+
+function place(i, ll, zoom) {
+  const st = state[i];
+  const w = L.latLng(ll).wrap();
+  st.lat = w.lat; st.lng = w.lng;
+  if (st.marker) st.marker.setLatLng(ll); else st.marker = L.marker(ll, { icon: pin('#ff7a3d', 26) }).addTo(st.map);
+  if (zoom) st.map.setView(ll, zoom);
+  f(i, 'maphint').textContent = `Correct spot: ${w.lat.toFixed(4)}, ${w.lng.toFixed(4)}. Tap again to move it.`;
+}
+
+async function search(i) {
+  const q = f(i, 'search').value.trim();
+  if (!q) return;
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
+    const [hit] = await r.json();
+    if (!hit) { toast('No place found'); return; }
+    place(i, [+hit.lat, +hit.lon], 12);
+    if (!f(i, 'label').value) f(i, 'label').value = hit.display_name.split(',').slice(0, 2).join(',').trim();
+  } catch { toast('Search failed. Tap the map instead.'); }
+}
+
+for (const i of [0, 1, 2]) {
+  const el = $(`q${i}`);
+  el.querySelectorAll('.seg button').forEach((b) => b.onclick = () => setKind(i, b.dataset.k));
+  ['answer', 'unit', 'abstol'].forEach((n) => f(i, n).addEventListener('input', () => updatePreview(i)));
+  f(i, 'scoring').addEventListener('change', () => updatePreview(i));
+  f(i, 'go').onclick = () => search(i);
+  f(i, 'search').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(i); } };
+  setKind(i, i === 2 ? 'map' : 'number');
+}
+
+async function loadQueue() {
+  try {
+    const q = await rpc('quiz_queue');
+    $('queue').innerHTML = q.queued
+      ? `<b>${q.queued}</b> set${q.queued === 1 ? '' : 's'} waiting in the queue.`
+      : `<b>The queue is empty</b>, so yours will be up next!`;
+  } catch {}
+}
+loadQueue();
+
+function collect() {
+  const author = $('author').value.trim();
+  if (!author) throw new Error('Add your name at the top');
+  return {
+    author,
+    questions: [0, 1, 2].map((i) => {
+      const prompt = f(i, 'prompt').value.trim();
+      if (prompt.length < 3) throw new Error(`Question ${i + 1} needs a question text`);
+      const fact = f(i, 'fact').value.trim();
+      if (state[i].kind === 'map') {
+        if (state[i].lat === null) throw new Error(`Question ${i + 1}: tap the map to set the correct spot`);
+        return { kind: 'map', prompt, lat: state[i].lat, lng: state[i].lng, label: f(i, 'label').value.trim(), tolerance: +f(i, 'radius').value, fact };
+      }
+      const answer = parseNumber(f(i, 'answer').value);
+      if (answer === null) throw new Error(`Question ${i + 1} needs a numeric answer`);
+      const s = SCORING.find((x) => x.id === f(i, 'scoring').value);
+      let tolerance = s.tol;
+      if (s.scoring === 'absolute') {
+        tolerance = parseNumber(f(i, 'abstol').value);
+        if (!(tolerance > 0)) throw new Error(`Question ${i + 1}: say how far off scores 1 point`);
+      } else if (answer <= 0) throw new Error(`Question ${i + 1}: use "Plain difference" scoring for answers of 0 or below`);
+      return { kind: 'number', prompt, answer, unit: f(i, 'unit').value.trim(), scoring: s.scoring, tolerance, fact };
+    }),
+  };
+}
+
+$('submit').onclick = async () => {
+  let data;
+  try { data = collect(); } catch (e) { toast(e.message); return; }
+  store.set('bp_author', data.author);
+  $('submit').disabled = true; $('submit').textContent = 'Adding…';
+  try {
+    const r = await rpc('quiz_add_set', { p_author: data.author, p_questions: data.questions });
+    $('form').classList.add('hidden');
+    $('done').classList.remove('hidden');
+    $('done').innerHTML = `<div class="card success">
+      <div class="big">🎉</div>
+      <h1>You're in the queue!</h1>
+      <p class="muted">Your set is number ${r.queue_position} in line and should run on <b style="color:var(--ink)">${fmtDate(r.expected_date)}</b> (weekdays only). Keep the answers to yourself until then!</p>
+      <a class="btn" href="add.html" style="text-decoration:none">Add another set</a>
+    </div>`;
+    window.scrollTo(0, 0);
+  } catch (e) {
+    toast(e.message);
+    $('submit').disabled = false; $('submit').textContent = 'Add to the queue';
+  }
+};
+</script>
+</body>
+</html>

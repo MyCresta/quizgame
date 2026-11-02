@@ -15,13 +15,12 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
   - Number, plain difference: the author sets how far off scores 1 point (good for years).
   - Map: distance-based; the author picks the radius where points bottom out.
 - **Schedule**: one set per weekday (Stockholm time), taken from the queue in the order added. No questions on weekends.
-- **Points right away**: players see their points per question as soon as they lock in, and the screen shows today's live points
-  (turn off with `showLivePoints` in `config.js`). Correct answers, closest guesses and facts are revealed the next morning.
+- **Points right away**: players see their points per question as soon as they lock in, and the screen's scoreboard
+  updates live with a "Today" column (turn off with `showLivePoints` in `config.js`). Correct answers, closest guesses and facts are revealed the next morning.
   The scoreboard covers the current month.
 - **Pictures**: a question can have an uploaded image (stored in the Supabase bucket `quiz-images`, resized to max 1400 px)
   or a red line drawn between two places on a map.
-- **Fits the screen**: long questions shrink to fit, the live-points strip shows as many players as fit plus "+N more",
-  and the scoreboard shows as many rows as fit.
+- **Fits the screen**: long questions shrink to fit and the scoreboard shows as many rows as fit.
 - **Players**: type a name once on the phone, no sign-up. One answer per name per day. Authors can't answer their own set.
 
 ## Setup

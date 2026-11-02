@@ -26,7 +26,7 @@
 
   .main { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.6rem; min-height: 0; }
   .col { display: grid; gap: 1.2rem; min-height: 0; }
-  .left { grid-template-rows: auto 1fr auto; }
+  .left { grid-template-rows: auto 1fr; }
   .right { grid-template-rows: auto 1fr; }
 
   .section-title { display: flex; align-items: baseline; justify-content: space-between; font-size: 1.15rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
@@ -42,35 +42,34 @@
   .q .prompt { min-width: 0; align-self: center; font-size: 1.95rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
   .q .prompt .tag { font-size: 1rem; vertical-align: .45em; margin-left: .3rem; white-space: nowrap; }
 
-  .answered { background: var(--panel); border-radius: var(--radius); padding: .8rem 1.2rem; display: flex; gap: 1rem; align-items: center; height: 5rem; overflow: hidden; }
-  .answered .names { flex: 1; min-width: 0; display: flex; gap: .6rem; align-items: center; white-space: nowrap; overflow: hidden; }
-  .answered .count { font-size: 1.6rem; font-weight: 800; color: var(--mint); margin-right: .4rem; }
   .chip { background: var(--panel-2); border-radius: 999px; padding: .3rem .8rem; font-size: 1.05rem; font-weight: 600; animation: pop .4s ease; flex: none; display: inline-flex; gap: .45rem; align-items: baseline; }
   .chip .pos { color: var(--muted); font-size: .85em; }
   .chip b { color: var(--mint); }
   .chip:first-of-type .pos { color: var(--gold); }
   .chip.more { background: none; color: var(--muted); animation: none; }
-  .answered .label { color: var(--muted); font-size: 1.1rem; flex: none; }
-  .answered .count { flex: none; }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
 
-  .qr-card { background: var(--ink); color: var(--bg); border-radius: var(--radius); padding: 1.3rem; display: grid; grid-template-columns: auto 1fr; gap: 1.4rem; align-items: center; }
-  .qr-card .qr { width: 11rem; height: 11rem; background: #fff; border-radius: 10px; padding: .5rem; display: grid; place-items: center; }
+  .qr-card { background: var(--ink); color: var(--bg); border-radius: var(--radius); padding: 1rem 1.2rem; display: grid; grid-template-columns: auto 1fr; gap: 1.2rem; align-items: center; }
+  .qr-card .qr { width: 7.5rem; height: 7.5rem; background: #fff; border-radius: 10px; padding: .5rem; display: grid; place-items: center; }
   .qr-card .qr svg, .qr-card .qr img { width: 100%; height: 100%; }
-  .qr-card h2 { margin: 0; font-size: 2.6rem; line-height: 1; letter-spacing: -0.03em; }
-  .qr-card p { margin: .5rem 0 0; font-size: 1.15rem; font-weight: 600; opacity: .75; }
-  .qr-card .url { font-family: var(--mono); font-size: .95rem; margin-top: .6rem; word-break: break-all; opacity: .6; }
+  .qr-card h2 { margin: 0; font-size: 2.1rem; line-height: 1; letter-spacing: -0.03em; }
+  .qr-card p { margin: .35rem 0 0; font-size: 1.05rem; font-weight: 600; opacity: .75; }
+  .qr-card .url { font-family: var(--mono); font-size: .85rem; margin-top: .4rem; word-break: break-all; opacity: .6; }
 
   .board { background: var(--panel); border-radius: var(--radius); padding: 1.3rem 1.5rem; display: grid; grid-template-rows: auto 1fr; gap: .8rem; min-height: 0; overflow: hidden; }
   .board table { width: 100%; border-collapse: collapse; font-size: 1.35rem; }
   .board td { padding: .42rem 0; border-bottom: 1px solid var(--line); }
   .board tr:last-child td { border-bottom: 0; }
   .board .rank { width: 2.6rem; font-weight: 800; color: var(--muted); }
-  .board tr:nth-child(1) .rank { color: var(--gold); }
-  .board tr:nth-child(2) .rank { color: #d9dde8; }
-  .board tr:nth-child(3) .rank { color: #e0a27a; }
+  .board tbody tr:nth-child(1) .rank { color: var(--gold); }
+  .board tbody tr:nth-child(2) .rank { color: #d9dde8; }
+  .board tbody tr:nth-child(3) .rank { color: #e0a27a; }
   .board .name { font-weight: 700; }
-  .board .days { color: var(--muted); font-size: 1rem; text-align: right; padding-right: 1.2rem; }
+  .board .today { color: var(--mint); font-size: 1.05rem; font-weight: 700; text-align: right; padding-right: 1.4rem; white-space: nowrap; }
+  .board .today.none { color: var(--line); }
+  .board .section-title .live { color: var(--mint); }
+  .board th { font-size: .85rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; padding: 0 0 .2rem; text-align: right; }
+  .board th.today { padding-right: 1.4rem; color: var(--muted); font-size: .85rem; }
   .board .pts { text-align: right; font-weight: 700; }
   #board { min-height: 0; overflow: hidden; }
   .empty { color: var(--muted); font-size: 1.3rem; align-self: center; text-align: center; padding: 1rem; }
@@ -112,11 +111,11 @@
     .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; gap: 1.4rem; }
     .q { padding: 1.1rem 1.4rem; }
     .q .prompt { font-size: 2.1rem; }
-    .right { grid-template-columns: 1fr 1.25fr; grid-template-rows: 23rem; gap: 1.2rem; }
-    .qr-card { grid-template-columns: 1fr; grid-template-rows: auto 1fr; justify-items: center; text-align: center; gap: 1rem; padding: 1.4rem 1.2rem; }
-    .qr-card .qr { width: 12.5rem; height: 12.5rem; }
-    .qr-card h2 { font-size: 2.3rem; }
-    .qr-card p { font-size: 1.05rem; }
+    .right { grid-template-columns: 14rem 1fr; grid-template-rows: 27rem; gap: 1.2rem; }
+    .qr-card { grid-template-columns: 1fr; align-content: center; justify-items: center; text-align: center; gap: .9rem; padding: 1.2rem 1rem; }
+    .qr-card .qr { width: 9rem; height: 9rem; }
+    .qr-card h2 { font-size: 1.9rem; }
+    .qr-card p { font-size: .95rem; }
     .qr-card .url { display: none; }
     .board table { font-size: 1.3rem; }
     .board td { padding: .32rem 0; }
@@ -148,7 +147,6 @@
     <div class="col left">
       <div class="section-title"><span>Today's questions</span><span id="author"></span></div>
       <div class="questions" id="questions"></div>
-      <div class="answered" id="answered"></div>
     </div>
     <div class="col right">
       <div class="qr-card">
@@ -160,7 +158,7 @@
         </div>
       </div>
       <div class="board">
-        <div class="section-title"><span id="boardTitle">Standings</span><span>points</span></div>
+        <div class="section-title"><span id="boardTitle">Standings</span><span id="boardCols">points</span></div>
         <div id="board"></div>
       </div>
     </div>
@@ -194,7 +192,6 @@ $('qr').innerHTML = qrSvg(playUrl);
 $('playUrl').textContent = playUrl.replace(/^https?:\/\//, '');
 
 let today = null;
-let lastAnsweredKey = '';
 let lastQuestionsKey = '';
 let maps = [];
 let qMaps = [];
@@ -244,70 +241,50 @@ function fitPrompts() {
 }
 document.fonts?.ready.then(fitPrompts);
 
-// One line of chips. Shows as many as fit, then "+N more".
-function renderAnswered(t) {
+// Nudge people to add questions when the queue runs low.
+function renderQueueHint(t) {
   const qs = t.questions || [];
-  const list = t.answered || [];
-  const key = JSON.stringify([list, t.queued, qs.length]);
-  if (key === lastAnsweredKey) return;
-  lastAnsweredKey = key;
-  if (!qs.length) {
-    $('answered').innerHTML = `<span class="muted" style="font-size:1.2rem">${t.queued ? `${t.queued} set${t.queued === 1 ? '' : 's'} waiting in the queue.` : 'No sets waiting in the queue.'}</span>`;
-    return;
-  }
-  const hint = '';
   $('queueHint').innerHTML = t.queued <= 1 && qs.length
     ? `<span class="add-hint"><span style="text-align:right">${t.queued ? 'Only 1 set left in the queue' : 'Queue is empty after today'}<br><b>Scan to add questions</b></span><span class="qr-small">${qrSvg(addUrl)}</span></span>`
     : '';
-  if (!list.length) {
-    $('answered').innerHTML = `<div class="names"><span class="muted" style="font-size:1.2rem">No answers yet. Be the first!</span></div>${hint}`;
-    return;
-  }
-  const live = CONFIG.showLivePoints;
-  // With live points: best score first. Without: newest first.
-  const people = live ? list : list.slice().reverse();
-  const chip = (a, i) => live
-    ? `<span class="chip"><span class="pos">${i + 1}</span>${esc(a.player)} <b class="num">${fmt(a.total)}</b></span>`
-    : `<span class="chip">${esc(a.player)}</span>`;
-  $('answered').innerHTML = `<div class="names"><span class="count">${list.length}</span><span class="label">${live ? 'today' : 'answered'}</span>${people.map(chip).join('')}<span class="chip more"></span></div>${hint}`;
-  const box = $('answered').querySelector('.names');
-  const chips = [...box.querySelectorAll('.chip:not(.more)')];
-  const more = box.querySelector('.more');
-  more.style.display = 'none';
-  let hidden = 0;
-  while (chips.length && box.scrollWidth > box.clientWidth + 1) {
-    chips.pop().remove(); hidden++;
-    more.style.display = ''; more.textContent = `+${hidden} more`;
-  }
 }
 
 const portrait = () => matchMedia('(orientation: portrait)').matches;
 function renderToday(t) {
   $('date').textContent = portrait() ? fmtDate(t.date, { weekday: 'short', day: 'numeric', month: 'short' }) : fmtDate(t.date);
   renderQuestions(t);
-  renderAnswered(t);
+  renderQueueHint(t);
   requestAnimationFrame(fitPrompts);   // after everything above has settled the layout
 }
 
 function renderBoard(sb) {
+  const live = CONFIG.showLivePoints;
   const month = new Date(`${sb.month}-15T12:00:00`).toLocaleDateString('en-GB', { month: 'long' });
+  const played = sb.played_today || 0;
   $('boardTitle').textContent = `${month} standings`;
-  const rows = (sb.rows || []).filter((r) => r.month_total > 0).slice(0, CONFIG.scoreboardSize);
+  $('boardCols').innerHTML = live ? (played ? `<span class="live">${played} played today</span>` : 'nobody yet today') : '';
+  // Without live points, leave today's points out until tomorrow's reveal.
+  const rows = (sb.rows || [])
+    .map((r) => ({ ...r, total: live ? r.month_total : r.month_total - (r.today_total || 0) }))
+    .filter((r) => r.total > 0)
+    .sort((x, y) => y.total - x.total)
+    .slice(0, CONFIG.scoreboardSize);
   if (!rows.length) {
-    $('board').innerHTML = `<div class="empty">No points yet this month.<br>First results land tomorrow morning.</div>`;
+    $('board').innerHTML = `<div class="empty">No points yet this month.<br>Scan the code and be the first!</div>`;
     return;
   }
-  $('board').innerHTML = `<table>${rows.map((r, i) => `
+  const head = `<thead><tr><th></th><th></th>${live ? '<th class="today">Today</th>' : ''}<th class="pts">${month.slice(0, 3)}</th></tr></thead>`;
+  $('board').innerHTML = `<table>${head}<tbody>${rows.map((r, i) => `
     <tr><td class="rank">${i + 1}</td><td class="name">${esc(r.player)}</td>
-    <td class="days">${r.month_days} day${r.month_days === 1 ? '' : 's'}</td>
-    <td class="pts num">${fmt(r.month_total)}</td></tr>`).join('')}</table>`;
+    ${live ? `<td class="today num ${r.today_total ? '' : 'none'}">${r.today_total ? `+${fmt(r.today_total)}` : '–'}</td>` : ''}
+    <td class="pts num">${fmt(r.total)}</td></tr>`).join('')}</tbody></table>`;
   fitBoard();
 }
 
 // Drop rows that don't fully fit, so the board never shows a half-cut row.
 function fitBoard() {
   const box = $('board');
-  const rows = box.querySelectorAll('tr');
+  const rows = box.querySelectorAll('tbody tr');
   for (let i = rows.length - 1; i > 0 && box.scrollHeight > box.clientHeight + 1; i--) rows[i].remove();
 }
 window.addEventListener('resize', () => { lastQuestionsKey = ''; safely(refreshAll); });
@@ -360,15 +337,16 @@ function renderResults(res) {
 }
 
 async function refreshToday() {
-  const t = await rpc('quiz_today');
+  const [t, sb] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard')]);
   if (today && t.date !== today.date) { location.reload(); return; }
   today = t;
   renderToday(t);
+  renderBoard(sb);
 }
 
 async function refreshAll() {
   const [t, sb, res] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard'), rpc('quiz_results')]);
-  today = t; lastAnsweredKey = '';
+  today = t;
   renderToday(t); renderBoard(sb); renderResults(res);
 }
 
@@ -378,7 +356,7 @@ async function safely(fn) {
 }
 
 safely(refreshAll);
-setInterval(() => safely(refreshToday), 20_000);       // new answers
+setInterval(() => safely(refreshToday), 20_000);       // new answers + live scoreboard
 setInterval(() => safely(refreshAll), 10 * 60_000);    // board + results
 // Full reload a few times a day keeps a long-running TV browser healthy
 setTimeout(() => location.reload(), 6 * 60 * 60_000);

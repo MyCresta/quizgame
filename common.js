@@ -64,21 +64,46 @@ export function points(scoring, tol, answer, guess) {
   return Math.max(1, Math.min(10000, Math.round(10000 * f ** 1.5)));
 }
 
+// Keyless tile sources. Esri basemaps have no place labels (good for map questions);
+// if a source fails to load, the map switches to OpenStreetMap automatically.
+const ESRI = (name) => `https://server.arcgisonline.com/ArcGIS/rest/services/${name}/MapServer/tile/{z}/{y}/{x}`;
+const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 export const TILES = {
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-  plain: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-  labels: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  dark: { url: ESRI('Canvas/World_Dark_Gray_Base'), attr: 'Tiles &copy; Esri', maxZoom: 16 },
+  plain: { url: ESRI('Canvas/World_Light_Gray_Base'), attr: 'Tiles &copy; Esri', maxZoom: 16 },
+  satellite: { url: ESRI('World_Imagery'), attr: 'Tiles &copy; Esri', maxZoom: 18 },
+  labels: { url: OSM, attr: OSM_ATTR, maxZoom: 19 },
 };
-const ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
 export function makeMap(el, { tiles = 'plain', interactive = true } = {}) {
   const map = L.map(el, {
     worldCopyJump: true, minZoom: 1, zoomControl: interactive, attributionControl: true,
     dragging: interactive, scrollWheelZoom: interactive, doubleClickZoom: interactive,
-    touchZoom: interactive, boxZoom: interactive, keyboard: interactive,
+    touchZoom: interactive, boxZoom: interactive, keyboard: interactive, tap: interactive,
   }).setView([30, 10], 1);
-  L.tileLayer(TILES[tiles], { attribution: ATTR, subdomains: 'abcd', maxZoom: 18 }).addTo(map);
+  const src = TILES[tiles];
+  let layer = L.tileLayer(src.url, { attribution: src.attr, maxZoom: src.maxZoom }).addTo(map);
+  if (src.url !== OSM) {
+    let errors = 0;
+    layer.on('tileerror', () => {
+      if (++errors !== 4) return;
+      map.removeLayer(layer);
+      layer = L.tileLayer(OSM, { attribution: OSM_ATTR, maxZoom: 19 }).addTo(map);
+    });
+  }
   return map;
+}
+
+// A two-point line drawn on a map, used as a question picture ("distance between A and B").
+export function lineMap(el, line, { tiles = 'labels' } = {}) {
+  const m = makeMap(el, { tiles, interactive: false });
+  if (m.attributionControl) m.attributionControl.setPrefix(false);
+  L.polyline(line, { color: '#ff3b3b', weight: 5, opacity: 0.95 }).addTo(m);
+  line.forEach((p) => L.circleMarker(p, { radius: 7, color: '#fff', weight: 3, fillColor: '#ff3b3b', fillOpacity: 1 }).addTo(m));
+  const fit = () => { m.invalidateSize(); m.fitBounds(L.latLngBounds(line).pad(0.35), { maxZoom: 9 }); };
+  fit(); setTimeout(fit, 100);
+  return m;
 }
 
 export function pin(color = '#ff7a3d', size = 22) {
@@ -107,4 +132,20 @@ export const store = {
 
 export function pageUrl(file) {
   return new URL(file, location.href).href;
+}
+
+// Resize an image file in the browser and upload it to the public quiz-images bucket.
+export async function uploadImage(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
+  const res = await fetch(`${CONFIG.supabaseUrl}/storage/v1/object/quiz-images/${path}`, {
+    method: 'POST', headers: { apikey: CONFIG.supabaseKey, 'Content-Type': 'image/jpeg' }, body: blob,
+  });
+  if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
+  return `${CONFIG.supabaseUrl}/storage/v1/object/public/quiz-images/${path}`;
 }

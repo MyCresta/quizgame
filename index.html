@@ -13,11 +13,14 @@
   /* Sized for a 16:9 screen: everything scales with the viewport. */
   html { font-size: min(1.05vw, 1.87vh); }
   body { height: 100vh; overflow: hidden; }
-  .screen { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; gap: 1.6rem; padding: 2rem 2.4rem; }
+  .screen { height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto; gap: 1.6rem; padding: 2rem 2.4rem; }
 
   header { display: flex; align-items: center; justify-content: space-between; }
   header .logo { font-size: 3.6rem; }
-  header .meta { text-align: right; }
+  header .meta { text-align: right; white-space: nowrap; }
+  #queueHint { margin-left: auto; margin-right: 2rem; }
+  #queueHint .add-hint { font-size: 1.15rem; }
+  #queueHint .qr-small { width: 4.4rem; height: 4.4rem; }
   header .date { font-size: 1.9rem; font-weight: 700; }
   header .sub { font-size: 1.15rem; color: var(--muted); }
 
@@ -29,16 +32,26 @@
   .section-title { display: flex; align-items: baseline; justify-content: space-between; font-size: 1.15rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-weight: 700; }
   .section-title b { color: var(--ink); }
 
-  .questions { display: grid; grid-template-rows: repeat(3, 1fr); gap: 1rem; min-height: 0; }
-  .q { background: var(--panel); border-radius: var(--radius); padding: 1.3rem 1.6rem; display: grid; grid-template-columns: 4.2rem 1fr; gap: 1.4rem; align-items: center; position: relative; overflow: hidden; }
+  .questions { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 1rem; min-height: 0; }
+  .q { background: var(--panel); border-radius: var(--radius); padding: 1.1rem 1.6rem; display: grid; grid-template-columns: 4.2rem 1fr; gap: 1.4rem; align-items: center; position: relative; overflow: hidden; min-height: 0; }
+  .q.has-pic { padding-right: 17.5rem; }
+  .q .pic { position: absolute; right: .9rem; top: .9rem; width: 15.5rem; height: calc(100% - 1.8rem); object-fit: cover; border-radius: 12px; background: var(--panel-2); }
+  .q .pic.leaflet-container { background: #0d1b2a; }
+  .q .pic .leaflet-control-attribution { font-size: 7px; }
   .q .n { font-size: 3.6rem; font-weight: 800; color: var(--accent); line-height: 1; text-align: center; }
-  .q .prompt { font-size: 1.95rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
+  .q .prompt { min-width: 0; align-self: center; font-size: 1.95rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
   .q .prompt .tag { font-size: 1rem; vertical-align: .45em; margin-left: .3rem; white-space: nowrap; }
 
   .answered { background: var(--panel); border-radius: var(--radius); padding: .8rem 1.2rem; display: flex; gap: 1rem; align-items: center; height: 5rem; overflow: hidden; }
   .answered .names { flex: 1; min-width: 0; display: flex; gap: .6rem; align-items: center; white-space: nowrap; overflow: hidden; }
   .answered .count { font-size: 1.6rem; font-weight: 800; color: var(--mint); margin-right: .4rem; }
-  .chip { background: var(--panel-2); border-radius: 999px; padding: .3rem .8rem; font-size: 1.05rem; font-weight: 600; animation: pop .4s ease; }
+  .chip { background: var(--panel-2); border-radius: 999px; padding: .3rem .8rem; font-size: 1.05rem; font-weight: 600; animation: pop .4s ease; flex: none; display: inline-flex; gap: .45rem; align-items: baseline; }
+  .chip .pos { color: var(--muted); font-size: .85em; }
+  .chip b { color: var(--mint); }
+  .chip:first-of-type .pos { color: var(--gold); }
+  .chip.more { background: none; color: var(--muted); animation: none; }
+  .answered .label { color: var(--muted); font-size: 1.1rem; flex: none; }
+  .answered .count { flex: none; }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
 
   .qr-card { background: var(--ink); color: var(--bg); border-radius: var(--radius); padding: 1.3rem; display: grid; grid-template-columns: auto 1fr; gap: 1.4rem; align-items: center; }
@@ -93,6 +106,9 @@
     .screen { padding: 2.2rem 2rem; gap: 1.4rem; }
     header .logo { font-size: 3.4rem; }
     header .date { font-size: 1.8rem; }
+    header .sub { display: none; }
+    #queueHint { margin-right: 1.4rem; }
+    #queueHint .add-hint { font-size: 1.05rem; }
     .main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; gap: 1.4rem; }
     .q { padding: 1.1rem 1.4rem; }
     .q .prompt { font-size: 2.1rem; }
@@ -121,6 +137,7 @@
 <div class="screen">
   <header>
     <div class="logo" id="logo"></div>
+    <div id="queueHint"></div>
     <div class="meta">
       <div class="date" id="date"></div>
       <div class="sub" id="sub"></div>
@@ -159,7 +176,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, lineMap, pin, dot, distanceKm, pageUrl } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -177,12 +194,17 @@ $('qr').innerHTML = qrSvg(playUrl);
 $('playUrl').textContent = playUrl.replace(/^https?:\/\//, '');
 
 let today = null;
-let lastAnsweredCount = '';
+let lastAnsweredKey = '';
+let lastQuestionsKey = '';
 let maps = [];
+let qMaps = [];
 
-function renderToday(t) {
-  $('date').textContent = fmtDate(t.date);
+function renderQuestions(t) {
   const qs = t.questions || [];
+  const key = `${t.date}|${t.set_id}|${qs.length}|${qs.length ? '' : t.queued}`;
+  if (key === lastQuestionsKey) return;   // only rebuild when the set changes (keeps maps/images steady)
+  lastQuestionsKey = key;
+  qMaps.forEach((m) => m.remove()); qMaps = [];
   if (!qs.length) {
     $('author').textContent = '';
     $('questions').innerHTML = `<div class="nothing">
@@ -191,32 +213,80 @@ function renderToday(t) {
         <p>${t.weekend ? 'New questions on Monday morning.' : 'Be the hero: add three questions for tomorrow.'}</p>
         <div class="add-hint" style="justify-content:center;margin-top:1.4rem"><div class="qr-small">${qrSvg(addUrl)}</div><span>Scan to <b>add a question set</b></span></div>
       </div></div>`;
-    $('answered').innerHTML = `<span class="muted" style="font-size:1.2rem">${t.queued ? `${t.queued} set${t.queued === 1 ? '' : 's'} waiting in the queue.` : 'No sets waiting in the queue.'}</span>`;
     return;
   }
   $('author').innerHTML = `Questions by <b>${esc(t.author)}</b>`;
   $('questions').innerHTML = qs.map((q) => `
-    <div class="q">
+    <div class="q ${q.image_url || q.line ? 'has-pic' : ''}">
       <div class="n">${q.position}</div>
-      <div>
-        <div class="prompt">${esc(q.prompt)} ${q.kind === 'map'
+      <div class="prompt">${esc(q.prompt)} ${q.kind === 'map'
           ? '<span class="tag map">📍 Map</span>'
           : q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : ''}</div>
-      </div>
+      ${q.image_url ? `<img class="pic" src="${esc(q.image_url)}" alt="">` : q.line ? `<div class="pic" id="qline-${q.id}"></div>` : ''}
     </div>`).join('');
-
-  const names = t.answered || [];
-  const key = `${names.length}|${t.queued}`;
-  if (key !== lastAnsweredCount) {
-    lastAnsweredCount = key;
-    const hint = t.queued <= 1
-      ? `<span class="add-hint"><span>${t.queued ? 'Only 1 set left' : 'Queue empty'} · <b>add questions</b></span><span class="qr-small">${qrSvg(addUrl)}</span></span>`
-      : '';
-    const chips = names.length
-      ? `<span class="count">${names.length}</span><span class="muted" style="font-size:1.1rem">answered:</span>` + names.slice().reverse().map((n) => `<span class="chip">${esc(n)}</span>`).join('')
-      : `<span class="muted" style="font-size:1.2rem">No answers yet. Be the first!</span>`;
-    $('answered').innerHTML = `<div class="names">${chips}</div>${hint}`;
+  if (typeof L !== 'undefined') {
+    for (const q of qs.filter((x) => x.line && !x.image_url)) qMaps.push(lineMap($(`qline-${q.id}`), q.line));
   }
+}
+
+// Shrink long question texts until they fit inside their card.
+function fitPrompts() {
+  document.querySelectorAll('.q').forEach((card) => {
+    const p = card.querySelector('.prompt');
+    if (!p) return;
+    p.style.fontSize = '';
+    const cs = getComputedStyle(card);
+    const avail = card.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    let size = parseFloat(getComputedStyle(p).fontSize);
+    const min = size * 0.55;
+    while (p.scrollHeight > avail && size > min) { size *= 0.94; p.style.fontSize = `${size}px`; }
+  });
+}
+document.fonts?.ready.then(fitPrompts);
+
+// One line of chips. Shows as many as fit, then "+N more".
+function renderAnswered(t) {
+  const qs = t.questions || [];
+  const list = t.answered || [];
+  const key = JSON.stringify([list, t.queued, qs.length]);
+  if (key === lastAnsweredKey) return;
+  lastAnsweredKey = key;
+  if (!qs.length) {
+    $('answered').innerHTML = `<span class="muted" style="font-size:1.2rem">${t.queued ? `${t.queued} set${t.queued === 1 ? '' : 's'} waiting in the queue.` : 'No sets waiting in the queue.'}</span>`;
+    return;
+  }
+  const hint = '';
+  $('queueHint').innerHTML = t.queued <= 1 && qs.length
+    ? `<span class="add-hint"><span style="text-align:right">${t.queued ? 'Only 1 set left in the queue' : 'Queue is empty after today'}<br><b>Scan to add questions</b></span><span class="qr-small">${qrSvg(addUrl)}</span></span>`
+    : '';
+  if (!list.length) {
+    $('answered').innerHTML = `<div class="names"><span class="muted" style="font-size:1.2rem">No answers yet. Be the first!</span></div>${hint}`;
+    return;
+  }
+  const live = CONFIG.showLivePoints;
+  // With live points: best score first. Without: newest first.
+  const people = live ? list : list.slice().reverse();
+  const chip = (a, i) => live
+    ? `<span class="chip"><span class="pos">${i + 1}</span>${esc(a.player)} <b class="num">${fmt(a.total)}</b></span>`
+    : `<span class="chip">${esc(a.player)}</span>`;
+  $('answered').innerHTML = `<div class="names"><span class="count">${list.length}</span><span class="label">${live ? 'today' : 'answered'}</span>${people.map(chip).join('')}<span class="chip more"></span></div>${hint}`;
+  const box = $('answered').querySelector('.names');
+  const chips = [...box.querySelectorAll('.chip:not(.more)')];
+  const more = box.querySelector('.more');
+  more.style.display = 'none';
+  let hidden = 0;
+  while (chips.length && box.scrollWidth > box.clientWidth + 1) {
+    chips.pop().remove(); hidden++;
+    more.style.display = ''; more.textContent = `+${hidden} more`;
+  }
+}
+
+const portrait = () => matchMedia('(orientation: portrait)').matches;
+function renderToday(t) {
+  $('date').textContent = portrait() ? fmtDate(t.date, { weekday: 'short', day: 'numeric', month: 'short' }) : fmtDate(t.date);
+  renderQuestions(t);
+  renderAnswered(t);
+  requestAnimationFrame(fitPrompts);   // after everything above has settled the layout
 }
 
 function renderBoard(sb) {
@@ -240,7 +310,7 @@ function fitBoard() {
   const rows = box.querySelectorAll('tr');
   for (let i = rows.length - 1; i > 0 && box.scrollHeight > box.clientHeight + 1; i--) rows[i].remove();
 }
-window.addEventListener('resize', () => safely(refreshAll));
+window.addEventListener('resize', () => { lastQuestionsKey = ''; safely(refreshAll); });
 
 function renderResults(res) {
   maps.forEach((m) => m.remove()); maps = [];
@@ -298,7 +368,7 @@ async function refreshToday() {
 
 async function refreshAll() {
   const [t, sb, res] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard'), rpc('quiz_results')]);
-  today = t; lastAnsweredCount = '';
+  today = t; lastAnsweredKey = '';
   renderToday(t); renderBoard(sb); renderResults(res);
 }
 

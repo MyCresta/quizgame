@@ -36,7 +36,7 @@
   .numwrap input { flex: 1; min-width: 0; background: none; border: 0; outline: none; padding: 16px; font-family: var(--mono); font-size: 28px; }
   .numwrap .unit { padding-right: 16px; color: var(--muted); font-weight: 600; }
   .preview { font-size: 14px; color: var(--muted); min-height: 1.2em; }
-  .preview b { color: var(--ink); font-family: var(--mono); }
+  .preview b { color: var(--ink); }
 
   .map { height: 52vh; min-height: 300px; border-radius: 14px; overflow: hidden; }
   .maphint { font-size: 14px; color: var(--muted); }
@@ -45,15 +45,17 @@
   .review { display: grid; gap: 10px; }
   .review .row { background: var(--panel-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; cursor: pointer; }
   .review .row .p { font-size: 14px; color: var(--muted); }
-  .review .row .a { font-weight: 700; font-family: var(--mono); }
+  .review .row .a { font-weight: 700; }
 
+  .qpic { width: 100%; max-height: 260px; object-fit: cover; border-radius: 14px; display: block; background: var(--panel-2); }
+  .qline { height: 220px; }
   .big-emoji { font-size: 56px; line-height: 1; }
   .center { text-align: center; justify-items: center; }
 
   .yest .line { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
   .yest .line:last-child { border-bottom: 0; }
-  .yest .line .pts { font-family: var(--mono); font-weight: 700; color: var(--mint); white-space: nowrap; }
-  .yest .total { font-size: 28px; font-weight: 800; font-family: var(--mono); color: var(--gold); }
+  .yest .line .pts { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mint); white-space: nowrap; }
+  .yest .total { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gold); }
   .links { display: flex; justify-content: center; gap: 18px; font-size: 15px; }
 </style>
 </head>
@@ -71,7 +73,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, distanceKm, store } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, lineMap, pin, distanceKm, store } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -103,7 +105,7 @@ function route() {
   if (!qs.length) return viewClosed();
   if (!name) return viewName();
   if (today.author && today.author.trim().toLowerCase() === name.toLowerCase()) return viewOwn();
-  if (store.get(doneKey()) || (today.answered || []).some((n) => n.toLowerCase() === name.toLowerCase())) return viewDone();
+  if (store.get(doneKey()) || (today.answered || []).some((a) => a.player.toLowerCase() === name.toLowerCase())) return viewDone();
   if (step < 3) return viewQuestion(step);
   return viewReview();
 }
@@ -120,7 +122,7 @@ function viewClosed() {
 function viewName() {
   $('view').innerHTML = `<div class="card">
     <h1>Today's three questions</h1>
-    <p class="muted">${fmtDate(today.date)} · questions by ${esc(today.author)}. Every answer scores 1 to 10 000 points depending on how close you get. Results show on the office screen tomorrow.</p>
+    <p class="muted">${fmtDate(today.date)} · questions by ${esc(today.author)}. Every answer scores 1 to 10 000 points depending on how close you get. You see your points right away; the correct answers are revealed tomorrow.</p>
     <label class="field"><span>Your name (shown on the scoreboard)</span>
       <input class="input" id="name" maxlength="30" autocomplete="given-name" placeholder="e.g. Anna S" value="${esc(name)}"></label>
     <button class="btn block" id="go">Let's go</button>
@@ -142,11 +144,29 @@ function viewOwn() {
   </div>`;
 }
 
-function viewDone() {
-  $('view').innerHTML = `<div class="card center">
-    <div class="big-emoji">🎯</div>
-    <h1>Locked in!</h1>
-    <p class="muted">Your answers for ${fmtDate(today.date)} are saved. The correct answers and your points appear on the office screen tomorrow morning.</p>
+async function viewDone(result) {
+  const head = `<div class="big-emoji">🎯</div><h1>Locked in!</h1>`;
+  $('view').innerHTML = `<div class="card center">${head}<p class="muted">Fetching your points…</p></div>`;
+  try { if (!result) result = await rpc('quiz_my_today', { p_player: name }); } catch (e) { console.error(e); }
+  if (!result || !result.points) {
+    $('view').innerHTML = `<div class="card center">${head}<p class="muted">Your answers for ${fmtDate(today.date)} are saved. The correct answers appear on the office screen tomorrow morning.</p></div>`;
+    return;
+  }
+  const qs = today.questions;
+  const lines = result.points.map((p) => {
+    const q = qs.find((x) => x.id === p.question_id);
+    const pct = p.points / 10000;
+    const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';
+    return `<div class="line"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>`;
+  }).join('');
+  $('view').innerHTML = `<div class="card">
+    <div class="center" style="display:grid;gap:8px">${head}</div>
+    <div class="yest">
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><span class="muted">Your points today</span>${result.rank ? `<span class="muted">#${result.rank} so far</span>` : ''}</div>
+      <div class="total">${fmtPts(result.total)}</div>
+      <div>${lines}</div>
+    </div>
+    <p class="muted" style="font-size:14px">The correct answers are revealed on the office screen tomorrow morning. No spoilers in the meantime! 🤐</p>
   </div>`;
 }
 
@@ -171,6 +191,7 @@ function viewQuestion(i) {
   $('view').innerHTML = `<div class="card">
     ${progress(i)}
     <div class="qnum">Question ${i + 1} of 3</div>
+    ${q.image_url ? `<img class="qpic" src="${esc(q.image_url)}" alt="">` : q.line ? `<div class="qpic qline" id="qline"></div>` : ''}
     <div class="prompt">${esc(q.prompt)}</div>
     ${body}
     <div class="nav">
@@ -179,6 +200,7 @@ function viewQuestion(i) {
     </div>
   </div>`;
 
+  if (q.line && !q.image_url && typeof L !== 'undefined') lineMap($('qline'), q.line);
   if (q.kind === 'map') {
     if (typeof L === 'undefined') { $('maphint').innerHTML = '<span class="error">The map failed to load. Check your connection and reload.</span>'; }
     else {
@@ -232,9 +254,9 @@ function viewReview() {
     $('submit').disabled = true; $('submit').textContent = 'Submitting…';
     try {
       const payload = qs.map((q) => ({ question_id: q.id, ...(q.kind === 'map' ? { lat: answers[q.id].lat, lng: answers[q.id].lng } : { value: answers[q.id].value }) }));
-      await rpc('quiz_submit', { p_player: name, p_answers: payload });
+      const result = await rpc('quiz_submit', { p_player: name, p_answers: payload });
       store.set(doneKey(), '1'); store.del(draftKey());
-      viewDone();
+      viewDone(result);
     } catch (e) {
       toast(e.message);
       $('submit').disabled = false; $('submit').textContent = 'Lock in my answers';
@@ -256,7 +278,7 @@ async function loadYesterday() {
       return `<div class="line"><span>${q.position}. ${correct}<br><span class="muted">${yours}</span></span><span class="pts">${fmtPts(g.points)}</span></div>`;
     }).join('');
     $('yesterday').innerHTML = `<div class="card yest">
-      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Your ${fmtDate(res.date, { weekday: 'long' })}</h2><span class="muted">#${idx + 1} of ${res.players.length}</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Your ${fmtDate(res.date, { weekday: 'long' })} results</h2><span class="muted">#${idx + 1} of ${res.players.length}</span></div>
       <div class="total">${fmtPts(me.total)}</div>
       <div>${lines}</div>
     </div>`;

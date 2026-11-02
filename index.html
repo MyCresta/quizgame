@@ -127,6 +127,35 @@
     .nothing h2 { font-size: 3rem; }
   }
 
+  /* ===== Near-square areas, e.g. half of a portrait screen (1080×960) ===== */
+  @media (orientation: landscape) and (max-aspect-ratio: 3/2) {
+    html { font-size: min(1.5vw, 1.68vh); }
+    .screen { padding: 1.6rem 1.8rem; gap: 1.2rem; }
+    header .sub { display: none; }
+    .main { grid-template-columns: 1.35fr 1fr; gap: 1.2rem; }
+    .qr-card { grid-template-columns: auto 1fr; padding: .9rem 1rem; gap: 1rem; }
+    .qr-card .qr { width: 7rem; height: 7rem; }
+    .qr-card h2 { font-size: 1.8rem; }
+    .qr-card p { font-size: .95rem; }
+    .qr-card .url { display: none; }
+    .q { padding: .9rem 1.2rem; grid-template-columns: 3rem 1fr; gap: 1rem; }
+    .q .n { font-size: 2.8rem; }
+    .q.has-pic { padding-right: 12.5rem; }
+    .q .pic { width: 11rem; }
+    .board { padding: 1rem 1.2rem; }
+    .board table { font-size: 1.2rem; }
+    .board td { padding: .3rem 0; }
+    .board .section-title { font-size: .9rem; letter-spacing: .08em; }
+    .results-grid { height: 10rem; gap: .8rem; }
+    .r { padding: .9rem 1.1rem; }
+    .r .ans { font-size: 2rem; }
+    .r .rq { font-size: .95rem; }
+    .r .best { font-size: 1rem; }
+    .r .fact { display: none; }
+    .r.map { grid-template-columns: 1fr; }
+    .r.map .mini { display: none; }
+  }
+
   .offline { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: .4rem 1rem; border-radius: 999px; font-size: 1rem; font-weight: 700; display: none; }
 </style>
 </head>

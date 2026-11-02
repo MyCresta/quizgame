@@ -55,15 +55,26 @@
   .qr-card .url { font-family: var(--mono); font-size: .85rem; margin-top: .4rem; word-break: break-all; opacity: .6; }
 
   .board { background: var(--panel); border-radius: var(--radius); padding: 1.3rem 1.5rem; display: grid; grid-template-rows: auto 1fr; gap: .8rem; min-height: 0; overflow: hidden; }
-  .board table { width: 100%; border-collapse: collapse; font-size: 1.35rem; }
+  .board table { width: 100%; border-collapse: collapse; font-size: 1.35rem; table-layout: fixed; }
+  .board th:nth-child(1) { width: 2.6rem; }
+  .board th.today { width: 7.5rem; }
+  .board th.pts { width: 7.5rem; }
+  .board .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .board td { padding: .42rem 0; border-bottom: 1px solid var(--line); }
   .board tr:last-child td { border-bottom: 0; }
   .board .rank { width: 2.6rem; font-weight: 800; color: var(--muted); }
-  .board tbody tr:nth-child(1) .rank { color: var(--gold); }
-  .board tbody tr:nth-child(2) .rank { color: #d9dde8; }
-  .board tbody tr:nth-child(3) .rank { color: #e0a27a; }
+  .board .rank.m1 { color: var(--gold); }
+  .board .rank.m2 { color: #d9dde8; }
+  .board .rank.m3 { color: #e0a27a; }
+  .board tr.idle .name { color: var(--muted); font-weight: 600; }
+  #board { transition: opacity .3s ease; display: grid; grid-template-rows: auto 1fr auto; }
+  #board.fade { opacity: 0; }
+  .pager { display: flex; gap: .45rem; align-items: center; justify-content: center; padding-top: .5rem; }
+  .pager span { width: .55rem; height: .55rem; border-radius: 50%; background: var(--line); }
+  .pager span.on { background: var(--mint); }
+  .pager em { font-style: normal; color: var(--muted); font-size: .9rem; margin-left: .6rem; font-variant-numeric: tabular-nums; }
   .board .name { font-weight: 700; }
-  .board .today { color: var(--mint); font-size: 1.05rem; font-weight: 700; text-align: right; padding-right: 1.4rem; white-space: nowrap; }
+  .board .today { color: var(--mint); font-size: 1.15rem; font-weight: 800; text-align: right; padding-right: 1.4rem; white-space: nowrap; }
   .board .today.none { color: var(--line); }
   .board .section-title .live { color: var(--mint); }
   .board th { font-size: .85rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; padding: 0 0 .2rem; text-align: right; }
@@ -294,49 +305,78 @@ function renderToday(t) {
   requestAnimationFrame(fitPrompts);   // after everything above has settled the layout
 }
 
+// ---------- Scoreboard: sorted by today's points, paged when it doesn't fit ----------
+const PAGE_MAX = 5;          // players per page (fewer if the space is small)
+const PAGE_SECONDS = 7;      // how long each page shows
+let boardRows = [];
+let boardMonth = '';
+let boardPage = 0;
+let boardPerPage = 0;        // measured from the available space; 0 = measure again
+let boardTimer = null;
+
 function renderBoard(sb) {
   const live = CONFIG.showLivePoints;
-  const month = new Date(`${sb.month}-15T12:00:00`).toLocaleDateString('en-GB', { month: 'long' });
-  const played = sb.played_today || 0;
-  $('boardTitle').textContent = `${month} standings`;
-  $('boardCols').innerHTML = live ? (played ? `<span class="live">${played} played today</span>` : 'nobody yet today') : '';
-  // Without live points, leave today's points out until tomorrow's reveal.
+  boardMonth = new Date(`${sb.month}-15T12:00:00`).toLocaleDateString('en-GB', { month: 'long' });
+  const played = live ? (sb.played_today || 0) : 0;
+  // Without live points, today's points stay hidden until tomorrow's reveal.
   const rows = (sb.rows || [])
-    .map((r) => ({ ...r, total: live ? r.month_total : r.month_total - (r.today_total || 0) }))
-    .filter((r) => r.total > 0)
-    .sort((x, y) => y.total - x.total)
-    .slice(0, CONFIG.scoreboardSize);
+    .map((r) => ({ ...r, today: live ? (r.today_total || 0) : 0, total: live ? r.month_total : r.month_total - (r.today_total || 0) }))
+    .filter((r) => r.total > 0 || r.today > 0)
+    // Today's best first; people who haven't played today follow, by month total.
+    .sort((x, y) => (y.today - x.today) || (y.total - x.total));
+  $('boardTitle').textContent = played ? 'Today’s leaderboard' : `${boardMonth} standings`;
+  $('boardCols').innerHTML = live ? (played ? `<span class="live">${played} played today</span>` : 'nobody yet today') : '';
+  boardRows = rows;
+  boardRows.played = played;
   if (!rows.length) {
+    clearInterval(boardTimer); boardTimer = null;
     $('board').innerHTML = `<div class="empty">No points yet this month.<br>Scan the code and be the first!</div>`;
     return;
   }
-  const head = `<thead><tr><th></th><th></th>${live ? '<th class="today">Today</th>' : ''}<th class="pts">${month.slice(0, 3)}</th></tr></thead>`;
-  $('board').innerHTML = `<table>${head}<tbody>${rows.map((r, i) => `
-    <tr><td class="rank">${i + 1}</td><td class="name">${esc(r.player)}</td>
-    ${live ? `<td class="today num ${r.today_total ? '' : 'none'}">${r.today_total ? `+${fmt(r.today_total)}` : '–'}</td>` : ''}
-    <td class="pts num">${fmt(r.total)}</td></tr>`).join('')}</tbody></table>`;
-  fitBoard();
+  if (!boardPerPage) boardPerPage = measurePerPage();
+  const pages = Math.ceil(rows.length / boardPerPage);
+  if (boardPage >= pages) boardPage = 0;
+  drawBoardPage(false);
+  clearInterval(boardTimer); boardTimer = null;
+  if (pages > 1) boardTimer = setInterval(() => { boardPage = (boardPage + 1) % Math.ceil(boardRows.length / boardPerPage); drawBoardPage(true); }, PAGE_SECONDS * 1000);
 }
 
-// Drop rows that don't fully fit, so the board never shows a half-cut row.
-function fitBoard() {
+function boardTable(rows, start) {
+  const live = CONFIG.showLivePoints;
+  const played = boardRows.played;
+  // Rank = position in today's order for those who played; month order for the rest.
+  const head = `<thead><tr><th></th><th></th>${live ? '<th class="today">Today</th>' : ''}<th class="pts">${boardMonth.slice(0, 3)}</th></tr></thead>`;
+  return `<table>${head}<tbody>${rows.map((r, i) => {
+    const pos = start + i + 1;
+    const medal = played && r.today && pos <= 3 ? ` m${pos}` : (!played && pos <= 3 ? ` m${pos}` : '');
+    return `<tr class="${r.today || !played ? '' : 'idle'}"><td class="rank${medal}">${r.today || !played ? pos : ''}</td><td class="name">${esc(r.player)}</td>
+    ${live ? `<td class="today num ${r.today ? '' : 'none'}">${r.today ? fmt(r.today) : '–'}</td>` : ''}
+    <td class="pts num">${fmt(r.total)}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+// How many rows fit: render PAGE_MAX rows and drop any that overflow.
+function measurePerPage() {
   const box = $('board');
-  const rows = box.querySelectorAll('tbody tr');
-  for (let i = rows.length - 1; i > 0 && box.scrollHeight > box.clientHeight + 1; i--) rows[i].remove();
-}
-window.addEventListener('resize', () => { lastQuestionsKey = ''; // Add ?size to the URL to show how much space the page gets (for setting up screen templates).
-if (new URLSearchParams(location.search).has('size')) {
-  const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;background:#ff7a3d;color:#1a0d05;font:800 28px/1.3 var(--display);padding:18px 26px;border-radius:16px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)';
-  const upd = () => {
-    const w = innerWidth, h = innerHeight, r = devicePixelRatio || 1;
-    const layout = w > h ? (w / h <= 1.5 ? 'near-square' : 'landscape') : (w / h >= 0.75 ? 'short portrait' : 'portrait');
-    box.innerHTML = `${w} × ${h}<br><span style="font-size:18px;font-weight:600">${r !== 1 ? `${Math.round(w * r)} × ${Math.round(h * r)} device pixels · ` : ''}${layout} layout</span>`;
-  };
-  upd(); addEventListener('resize', upd); document.body.appendChild(box);
+  box.innerHTML = boardTable(Array.from({ length: PAGE_MAX }, () => ({ player: 'Measure', today: 10000, total: 10000 })), 0) + '<div class="pager"><span class="on"></span></div>';
+  const rows = [...box.querySelectorAll('tbody tr')];
+  let n = rows.length;
+  while (n > 1 && box.scrollHeight > box.clientHeight + 1) { rows[--n].remove(); }
+  return n;
 }
 
-safely(refreshAll); });
+function drawBoardPage(animate) {
+  const pages = Math.ceil(boardRows.length / boardPerPage);
+  const start = boardPage * boardPerPage;
+  const html = boardTable(boardRows.slice(start, start + boardPerPage), start) +
+    (pages > 1 ? `<div class="pager">${Array.from({ length: pages }, (_, i) => `<span class="${i === boardPage ? 'on' : ''}"></span>`).join('')}<em>${start + 1}–${Math.min(start + boardPerPage, boardRows.length)} of ${boardRows.length}</em></div>` : '');
+  const box = $('board');
+  if (!animate) { box.innerHTML = html; return; }
+  box.classList.add('fade');
+  setTimeout(() => { box.innerHTML = html; box.classList.remove('fade'); }, 300);
+}
+
+window.addEventListener('resize', () => { lastQuestionsKey = ''; boardPerPage = 0; safely(refreshAll); });
 
 const domain = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const factLine = (q) => [q.fact ? esc(q.fact) : '', q.source_url ? `<span class="src">Source: ${esc(domain(q.source_url))}</span>` : ''].filter(Boolean).join(' · ');
@@ -408,6 +448,18 @@ async function safely(fn) {
 }
 
 safely(refreshAll);
+// Add ?size to the URL to show how much space the page gets (for setting up screen templates).
+if (new URLSearchParams(location.search).has('size')) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;background:#ff7a3d;color:#1a0d05;font:800 28px/1.3 var(--display);padding:18px 26px;border-radius:16px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)';
+  const upd = () => {
+    const w = innerWidth, h = innerHeight, r = devicePixelRatio || 1;
+    const layout = w > h ? (w / h <= 1.5 ? 'near-square' : 'landscape') : (w / h >= 0.75 ? 'short portrait' : 'portrait');
+    box.innerHTML = `${w} × ${h}<br><span style="font-size:18px;font-weight:600">${r !== 1 ? `${Math.round(w * r)} × ${Math.round(h * r)} device pixels · ` : ''}${layout} layout</span>`;
+  };
+  upd(); addEventListener('resize', upd); document.body.appendChild(box);
+}
+
 setInterval(() => safely(refreshToday), 20_000);       // new answers + live scoreboard
 setInterval(() => safely(refreshAll), 10 * 60_000);    // board + results
 // Full reload a few times a day keeps a long-running TV browser healthy

@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="forms.css">
+<link rel="stylesheet" href="widgets.css">
 <style>
   .app { max-width: 760px; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -75,7 +76,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtDate, esc } from './common.js';
+import { rpc, fmt, fmtDate, esc, swatchHtml } from './common.js';
 import { createSetEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
@@ -117,8 +118,14 @@ $('logout').onclick = (e) => { e.preventDefault(); pass = ''; sessionStorage.rem
 async function load() { data = await admin('list'); render(); }
 
 function answerText(q) {
-  if (q.kind === 'map') return `📍 ${esc(q.label || `${q.lat?.toFixed(3)}, ${q.lng?.toFixed(3)}`)}`;
-  return `${fmt(q.answer)} ${esc(q.unit || '')}`;
+  switch (q.kind) {
+    case 'map': return `📍 ${esc(q.label || `${q.lat?.toFixed(3)}, ${q.lng?.toFixed(3)}`)}`;
+    case 'percent': return `${fmt(q.answer)} %`;
+    case 'time': return `⏱ ${fmt(q.answer)} s`;
+    case 'color': return `${swatchHtml(q.color)} ${esc(q.color)}`;
+    case 'order': return (q.items || []).map((it, i) => `${i + 1}. ${esc(it)}`).join(' › ');
+    default: return `${fmt(q.answer)} ${esc(q.unit || '')}`;
+  }
 }
 
 function setCard(s, opts) {

@@ -1,5 +1,6 @@
 // The 3-question set editor, shared by the "add" page and the admin page.
-import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points } from './common.js';
+import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js';
+import { createColorPicker, hexToRgb } from './widgets.js';
 
 export const SCORING = [
   { id: 'r1', label: 'Ballpark: 10× off scores 1 point', scoring: 'ratio', tol: 1 },
@@ -8,7 +9,24 @@ export const SCORING = [
   { id: 'abs', label: 'Plain difference (years, temperatures…)', scoring: 'absolute' },
 ];
 const RADIUS = [[300, 'Within 300 km (same region)'], [1000, 'Within 1 000 km (same country-ish)'], [2000, 'Within 2 000 km (same continent)'], [5000, 'Within 5 000 km (rough area of the world)']];
-const PLACEHOLDERS = ['How far is it between our Stockholm and Gothenburg offices?', 'How many rolls of toilet paper does a person use in a lifetime?', 'How much does an average adult elephant weigh?'];
+// Strictness presets for the other types: value = how far off scores 1 point
+const PCT_TOL = [[15, 'Tight: 15 percentage points off scores 1 point'], [30, 'Normal: 30 points off scores 1 point'], [50, 'Loose: 50 points off scores 1 point']];
+const TIME_TOL = [[0.15, 'Tight: 15 % of the target off scores 1 point'], [0.3, 'Normal: 30 % off scores 1 point'], [0.5, 'Loose: 50 % off scores 1 point']];
+const COLOR_TOL = [[40, 'Tight: only very close shades score well'], [60, 'Normal'], [90, 'Loose: same colour family scores well']];
+
+export const KINDS = [
+  ['number', '# Number'], ['map', '📍 Map pin'], ['percent', '% Percent'],
+  ['time', '⏱ Timer'], ['color', '🎨 Colour'], ['order', '↕ Sort'],
+];
+const PLACEHOLDERS = {
+  number: ['How far is it between our Stockholm and Gothenburg offices?', 'How many rolls of toilet paper does a person use in a lifetime?', 'How much does an average adult elephant weigh?'],
+  map: ['Where was this photo taken?'],
+  percent: ['What percentage of the Earth’s surface is covered by water?'],
+  time: ['Stop the clock at exactly 10 seconds'],
+  color: ['Pick the exact Spotify green'],
+  order: ['Sort these buildings by height, tallest first'],
+};
+const opts = (list, sel) => list.map(([v, l]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
 
 async function geocode(q) {
   const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`, { headers: { Accept: 'application/json' } });
@@ -19,7 +37,7 @@ async function geocode(q) {
 function block(uid, i) {
   return `<div class="card" id="${uid}-q${i}">
     <h2><span class="n">${i + 1}</span> Question ${i + 1}</h2>
-    <div class="seg" data-f="kindseg"><button type="button" data-k="number" class="on"># Number</button><button type="button" data-k="map">📍 Map pin</button></div>
+    <div class="seg seg-kinds" data-f="kindseg">${KINDS.map(([k, l]) => `<button type="button" data-k="${k}">${l}</button>`).join('')}</div>
     <label class="field"><span>Question</span><textarea class="input" data-f="prompt" maxlength="300"></textarea></label>
 
     <div data-part="number" style="display:grid;gap:14px">
@@ -37,11 +55,39 @@ function block(uid, i) {
     <div data-part="map" class="hidden" style="display:grid;gap:12px">
       <div class="search"><input class="input" data-f="search" placeholder="Search a place to jump there"><button type="button" class="btn ghost" data-f="go">Find</button></div>
       <div class="map" data-f="map"></div>
-      <div class="hint" data-f="maphint">Tap the map to place the correct spot. Players see a map without labels.</div>
+      <div class="hint" data-f="maphint">Tap the map to place the correct spot. Players see a map without place names.</div>
       <div class="row2">
         <label class="field"><span>Name of the place (shown with the answer)</span><input class="input" data-f="label" maxlength="80" placeholder="e.g. Our Gothenburg office"></label>
         <label class="field"><span>1 point if further than</span><select class="input" data-f="radius">${RADIUS.map(([v, l]) => `<option value="${v}" ${v === 2000 ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       </div>
+      <div class="hint">💡 Tip: add a photo link below and ask “Where was this photo taken?”</div>
+    </div>
+
+    <div data-part="percent" class="hidden" style="display:grid;gap:14px">
+      <label class="field"><span>Correct answer (0–100 %)</span><input class="input num" data-f="pct" inputmode="decimal" placeholder="e.g. 71"></label>
+      <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="pcttol">${opts(PCT_TOL, 30)}</select></label>
+      <div class="scoreprev" data-f="pctprev"></div>
+    </div>
+
+    <div data-part="time" class="hidden" style="display:grid;gap:14px">
+      <label class="field"><span>Target time in seconds (1–120)</span><input class="input num" data-f="secs" inputmode="decimal" placeholder="e.g. 10"></label>
+      <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="timetol">${opts(TIME_TOL, 0.3)}</select></label>
+      <div class="scoreprev" data-f="timeprev"></div>
+      <div class="hint">Players tap Start, count in their head with no clock shown, and tap Stop. One try each.</div>
+    </div>
+
+    <div data-part="color" class="hidden" style="display:grid;gap:14px">
+      <div class="swatch-row"><span class="swatch empty" data-f="csw"></span>
+        <label class="field" style="flex:1"><span>Correct colour (hex code)</span><input class="input num" data-f="hex" maxlength="7" placeholder="#1db954"></label></div>
+      <div data-f="picker"></div>
+      <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="coltol">${opts(COLOR_TOL, 60)}</select></label>
+      <div class="hint">Tip: search “Spotify green hex” to get the exact code. Players mix the colour with a picker, no codes allowed.</div>
+    </div>
+
+    <div data-part="order" class="hidden" style="display:grid;gap:12px">
+      <div class="hint">Write the items in the <b>correct</b> order, first at the top. Players get them shuffled and drag them into order.</div>
+      <div data-f="items" style="display:grid;gap:8px"></div>
+      <div class="actions" style="display:flex;gap:8px"><button type="button" class="btn ghost" data-f="additem" style="padding:.6em 1em">＋ Item</button><button type="button" class="btn ghost" data-f="delitem" style="padding:.6em 1em">− Item</button></div>
     </div>
 
     <details class="more" data-f="more">
@@ -60,16 +106,18 @@ function block(uid, i) {
 export function createSetEditor(root, { toast = alert, onChange = () => {} } = {}) {
   const uid = `ed${Math.random().toString(36).slice(2, 7)}`;
   root.innerHTML = [0, 1, 2].map((i) => block(uid, i)).join('');
-  const state = [0, 1, 2].map(() => ({ kind: 'number', lat: null, lng: null, map: null, marker: null, imageOk: true }));
+  const state = [0, 1, 2].map(() => ({ kind: 'number', lat: null, lng: null, map: null, marker: null, imageOk: true, picker: null, autoPrompt: '' }));
   const card = (i) => document.getElementById(`${uid}-q${i}`);
   const f = (i, name) => card(i).querySelector(`[data-f="${name}"]`);
+  const part = (i, name) => card(i).querySelector(`[data-part="${name}"]`);
 
+  // ---- number ----
   function updateNumberPreview(i) {
     const ans = parseNumber(f(i, 'answer').value);
     const unit = f(i, 'unit').value.trim();
     f(i, 'answerPreview').innerHTML = ans === null ? (f(i, 'answer').value ? '<span class="error">Not a number</span>' : '') : `Answer: <b class="num">${fmt(ans)}</b> ${esc(unit)}`;
     const s = SCORING.find((x) => x.id === f(i, 'scoring').value);
-    card(i).querySelector('[data-part="abs"]').classList.toggle('hidden', s.scoring !== 'absolute');
+    part(i, 'abs').classList.toggle('hidden', s.scoring !== 'absolute');
     const prev = f(i, 'prev');
     if (ans === null) { prev.innerHTML = ''; return; }
     if (s.scoring === 'ratio') {
@@ -80,6 +128,42 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
       prev.innerHTML = tol > 0 ? [tol * 0.1, tol * 0.25, tol * 0.5]
         .map((d) => `<div>Off by ${fmt(d)}<b>${fmtPts(points('absolute', tol, ans, ans + d))}</b></div>`).join('') : '';
     }
+  }
+
+  // ---- percent / time previews ----
+  function updatePctPreview(i) {
+    const tol = +f(i, 'pcttol').value;
+    f(i, 'pctprev').innerHTML = [5, 10, 20].map((d) => `<div>${d} points off<b>${fmtPts(points('absolute', tol, 0, d))}</b></div>`).join('');
+  }
+  function updateTimePreview(i) {
+    const t = parseNumber(f(i, 'secs').value);
+    const tol = (t || 0) * +f(i, 'timetol').value;
+    f(i, 'timeprev').innerHTML = t > 0 ? [0.25, 0.5, 1].map((d) => `<div>${String(d).replace('.', ',')} s off<b>${fmtPts(points('absolute', tol, 0, d))}</b></div>`).join('') : '';
+    // Keep an auto-written prompt in sync with the target
+    const p = f(i, 'prompt');
+    if (t > 0 && (!p.value.trim() || p.value === state[i].autoPrompt)) {
+      state[i].autoPrompt = `Stop the clock at exactly ${fmt(t)} second${t === 1 ? '' : 's'}`;
+      p.value = state[i].autoPrompt;
+    }
+  }
+
+  // ---- colour ----
+  function setHex(i, hex, fromPicker = false) {
+    const ok = !!hexToRgb(hex);
+    const sw = f(i, 'csw');
+    sw.classList.toggle('empty', !ok);
+    sw.style.background = ok ? hex : '';
+    if (ok && !fromPicker) state[i].picker?.set(hex);
+    if (fromPicker) f(i, 'hex').value = hex;
+  }
+
+  // ---- sort items ----
+  function itemInputs(i) { return [...f(i, 'items').querySelectorAll('input')]; }
+  function setItems(i, values) {
+    f(i, 'items').innerHTML = values.map((v, k) => `<div style="display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:center"><b style="color:var(--accent);text-align:center">${k + 1}</b><input class="input" maxlength="60" value="${esc(v)}" placeholder="${k === 0 ? 'e.g. Burj Khalifa (the tallest)' : `Item ${k + 1}`}"></div>`).join('');
+    itemInputs(i).forEach((inp) => inp.addEventListener('input', onChange));
+    f(i, 'delitem').disabled = values.length <= 3;
+    f(i, 'additem').disabled = values.length >= 6;
   }
 
   function ensureMap(i) {
@@ -95,10 +179,16 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
   function setKind(i, kind) {
     state[i].kind = kind;
     f(i, 'kindseg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind));
-    card(i).querySelector('[data-part="number"]').classList.toggle('hidden', kind !== 'number');
-    card(i).querySelector('[data-part="map"]').classList.toggle('hidden', kind !== 'map');
-    f(i, 'prompt').placeholder = kind === 'map' ? 'e.g. Pin our newest office' : PLACEHOLDERS[i];
+    KINDS.forEach(([k]) => part(i, k).classList.toggle('hidden', k !== kind));
+    const ph = PLACEHOLDERS[kind];
+    f(i, 'prompt').placeholder = ph[i % ph.length];
     if (kind === 'map') ensureMap(i);
+    if (kind === 'color' && !state[i].picker) {
+      state[i].picker = createColorPicker(f(i, 'picker'), { onChange: (hex) => { setHex(i, hex, true); onChange(); } });
+    }
+    if (kind === 'order' && !itemInputs(i).length) setItems(i, ['', '', '', '', '']);
+    if (kind === 'time') updateTimePreview(i);
+    if (kind === 'percent') updatePctPreview(i);
     onChange();
   }
 
@@ -142,6 +232,16 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     f(i, 'kindseg').querySelectorAll('button').forEach((b) => b.onclick = () => setKind(i, b.dataset.k));
     ['answer', 'unit', 'abstol'].forEach((n) => f(i, n).addEventListener('input', () => { updateNumberPreview(i); onChange(); }));
     f(i, 'scoring').addEventListener('change', () => { updateNumberPreview(i); onChange(); });
+    f(i, 'pcttol').addEventListener('change', () => updatePctPreview(i));
+    f(i, 'secs').addEventListener('input', () => { updateTimePreview(i); onChange(); });
+    f(i, 'timetol').addEventListener('change', () => updateTimePreview(i));
+    f(i, 'hex').addEventListener('input', () => {
+      let v = f(i, 'hex').value.trim();
+      if (/^[0-9a-f]{6}$/i.test(v)) v = '#' + v;
+      setHex(i, v.toLowerCase());
+    });
+    f(i, 'additem').onclick = () => { const v = itemInputs(i).map((x) => x.value); if (v.length < 6) setItems(i, [...v, '']); onChange(); };
+    f(i, 'delitem').onclick = () => { const v = itemInputs(i).map((x) => x.value); if (v.length > 3) setItems(i, v.slice(0, -1)); onChange(); };
     ['prompt', 'label', 'fact', 'source'].forEach((n) => f(i, n).addEventListener('input', onChange));
     f(i, 'imgurl').addEventListener('input', () => checkImage(i));
     f(i, 'go').onclick = () => search(i);
@@ -151,40 +251,73 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
 
   // Current values without validation (for the preview)
   function peek() {
-    return [0, 1, 2].map((i) => ({
-      kind: state[i].kind,
-      prompt: f(i, 'prompt').value.trim(),
-      unit: state[i].kind === 'number' ? f(i, 'unit').value.trim() : '',
-      image_url: state[i].imageOk ? f(i, 'imgurl').value.trim() : '',
-    }));
+    return [0, 1, 2].map((i) => {
+      const k = state[i].kind;
+      const items = k === 'order' ? itemInputs(i).map((x) => x.value.trim()).filter(Boolean) : null;
+      return {
+        kind: k,
+        prompt: f(i, 'prompt').value.trim(),
+        unit: k === 'number' ? f(i, 'unit').value.trim() : '',
+        target: k === 'time' ? parseNumber(f(i, 'secs').value) : null,
+        items: items ? items.slice().reverse() : null,   // shown shuffled to players; reversed is a fine stand-in
+        image_url: state[i].imageOk ? f(i, 'imgurl').value.trim() : '',
+      };
+    });
   }
 
   // Validated payload for the database; throws with a readable message.
   function collect() {
     return [0, 1, 2].map((i) => {
+      const n = i + 1;
+      const k = state[i].kind;
       const prompt = f(i, 'prompt').value.trim();
-      if (prompt.length < 3) throw new Error(`Question ${i + 1} needs a question text`);
+      if (prompt.length < 3) throw new Error(`Question ${n} needs a question text`);
       const extras = { fact: f(i, 'fact').value.trim(), source_url: f(i, 'source').value.trim() };
       const imageUrl = f(i, 'imgurl').value.trim();
-      if (imageUrl && state[i].imageOk === false) throw new Error(`Question ${i + 1}: the image link doesn't work (clear it or fix it)`);
-      if (imageUrl && state[i].imageOk === null) throw new Error(`Question ${i + 1}: the image is still loading, try again in a second`);
+      if (imageUrl && state[i].imageOk === false) throw new Error(`Question ${n}: the image link doesn't work (clear it or fix it)`);
+      if (imageUrl && state[i].imageOk === null) throw new Error(`Question ${n}: the image is still loading, try again in a second`);
       if (imageUrl) extras.image_url = imageUrl;
-      if (extras.source_url && !/^https?:\/\//i.test(extras.source_url)) throw new Error(`Question ${i + 1}: the source should be a web link (https://…)`);
-      if (state[i].kind === 'map') {
-        if (state[i].lat === null) throw new Error(`Question ${i + 1}: tap the map to set the correct spot`);
+      if (extras.source_url && !/^https?:\/\//i.test(extras.source_url)) throw new Error(`Question ${n}: the source should be a web link (https://…)`);
+
+      if (k === 'map') {
+        if (state[i].lat === null) throw new Error(`Question ${n}: tap the map to set the correct spot`);
         return { kind: 'map', prompt, lat: state[i].lat, lng: state[i].lng, label: f(i, 'label').value.trim(), tolerance: +f(i, 'radius').value, ...extras };
       }
+      if (k === 'percent') {
+        const v = parseNumber(f(i, 'pct').value.replace('%', ''));
+        if (v === null || v < 0 || v > 100) throw new Error(`Question ${n}: the correct answer must be 0 to 100 %`);
+        return { kind: 'percent', prompt, answer: v, tolerance: +f(i, 'pcttol').value, ...extras };
+      }
+      if (k === 'time') {
+        const t = parseNumber(f(i, 'secs').value);
+        if (t === null || t < 1 || t > 120) throw new Error(`Question ${n}: the target time must be 1 to 120 seconds`);
+        return { kind: 'time', prompt, answer: t, tolerance: Math.round(t * +f(i, 'timetol').value * 1000) / 1000, ...extras };
+      }
+      if (k === 'color') {
+        let hex = f(i, 'hex').value.trim().toLowerCase();
+        if (/^[0-9a-f]{6}$/.test(hex)) hex = '#' + hex;
+        if (!hexToRgb(hex)) throw new Error(`Question ${n}: enter the correct colour as a hex code like #1db954, or pick it`);
+        return { kind: 'color', prompt, color: hex, tolerance: +f(i, 'coltol').value, ...extras };
+      }
+      if (k === 'order') {
+        const items = itemInputs(i).map((x) => x.value.trim());
+        if (items.some((x) => !x)) throw new Error(`Question ${n}: fill in every item (or remove the empty ones)`);
+        if (new Set(items.map((x) => x.toLowerCase())).size !== items.length) throw new Error(`Question ${n}: the items must all be different`);
+        return { kind: 'order', prompt, items, ...extras };
+      }
       const answer = parseNumber(f(i, 'answer').value);
-      if (answer === null) throw new Error(`Question ${i + 1} needs a numeric answer`);
+      if (answer === null) throw new Error(`Question ${n} needs a numeric answer`);
       const s = SCORING.find((x) => x.id === f(i, 'scoring').value);
       let tolerance = s.tol;
       if (s.scoring === 'absolute') {
         tolerance = parseNumber(f(i, 'abstol').value);
-        if (!(tolerance > 0)) throw new Error(`Question ${i + 1}: say how far off scores 1 point`);
-      } else if (answer <= 0) throw new Error(`Question ${i + 1}: use "Plain difference" scoring for answers of 0 or below`);
+        if (!(tolerance > 0)) throw new Error(`Question ${n}: say how far off scores 1 point`);
+      } else if (answer <= 0) throw new Error(`Question ${n}: use "Plain difference" scoring for answers of 0 or below`);
       return { kind: 'number', prompt, answer, unit: f(i, 'unit').value.trim(), scoring: s.scoring, tolerance, ...extras };
     });
   }
+
+  const nearest = (list, v) => list.reduce((a, b) => (Math.abs(b[0] - v) < Math.abs(a[0] - v) ? b : a))[0];
 
   // Fill the editor from a stored set (admin)
   function load(questions) {
@@ -199,11 +332,26 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
         f(i, 'scoring').value = preset ? preset.id : 'abs';
         if (!preset) f(i, 'abstol').value = q.tolerance;
         updateNumberPreview(i);
-      } else {
+      } else if (q.kind === 'map') {
         f(i, 'label').value = q.label || '';
         f(i, 'radius').value = String(q.tolerance);
         place(i, [q.lat, q.lng]);
         state[i].map?.setView([q.lat, q.lng], 5);
+      } else if (q.kind === 'percent') {
+        f(i, 'pct').value = q.answer ?? '';
+        f(i, 'pcttol').value = String(nearest(PCT_TOL, q.tolerance));
+        updatePctPreview(i);
+      } else if (q.kind === 'time') {
+        f(i, 'secs').value = q.answer ?? '';
+        f(i, 'timetol').value = String(nearest(TIME_TOL, q.tolerance / (q.answer || 1)));
+        state[i].autoPrompt = '';
+        updateTimePreview(i);
+      } else if (q.kind === 'color') {
+        f(i, 'hex').value = q.color || '';
+        setHex(i, q.color || '');
+        f(i, 'coltol').value = String(nearest(COLOR_TOL, q.tolerance));
+      } else if (q.kind === 'order') {
+        setItems(i, q.items || ['', '', '']);
       }
       f(i, 'imgurl').value = q.image_url || '';
       f(i, 'fact').value = q.fact || '';
@@ -219,14 +367,22 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
 
 // Live preview of a set: a mini office-screen view plus a mini phone, one question at a time.
 export function renderPreview(el, qs, author, current = 0) {
-  const tag = (q) => q.kind === 'map' ? '<span class="tag map">📍 Map</span>' : q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : '';
+  const tag = (q) => q.kind === 'number' ? (q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : '') : KIND_TAG[q.kind] || '';
   const screen = qs.map((q, i) => `
     <div class="pv-q ${q.prompt ? '' : 'empty'}">
       <div class="n">${i + 1}</div>
-      <div class="p">${q.prompt ? esc(q.prompt) : 'Question ' + (i + 1) + '…'} ${tag(q)}</div>
+      <div class="p">${q.prompt ? esc(q.prompt) : 'Question ' + (i + 1) + '…'} ${tag(q)}${q.kind === 'order' && q.items?.length ? `<div class="pv-items">${q.items.map((it) => `<span>${esc(it)}</span>`).join('')}</div>` : ''}</div>
       ${q.image_url ? `<img src="${esc(q.image_url)}" alt="">` : '<span></span>'}
     </div>`).join('');
   const q = qs[current];
+  const inputs = {
+    map: '<div class="fake-map">Map without place names</div>',
+    percent: '<div class="fake-pct"><b>50 %</b><span></span></div>',
+    time: `<div class="fake-timer">Start</div><div class="muted" style="font-size:11px;text-align:center">Stop at ${q.target ? fmt(q.target) : '?'} s</div>`,
+    color: '<div class="fake-color"></div>',
+    order: `<div class="fake-sort">${(q.items?.length ? q.items : ['Item', 'Item', 'Item']).map((it, k) => `<span><b>${k + 1}</b> ${esc(it)}</span>`).join('')}</div>`,
+    number: `<div class="fake-input"><span>Your guess</span><span>${esc(q.unit || '')}</span></div>`,
+  };
   el.innerHTML = `
     <div class="pv-screen"><div class="lbl">Office screen · questions by ${esc(author || 'you')}</div>${screen}</div>
     <div class="pv-tabs">${qs.map((_, i) => `<button type="button" data-i="${i}" class="${i === current ? 'on' : ''}">📱 Q${i + 1}</button>`).join('')}</div>
@@ -234,7 +390,7 @@ export function renderPreview(el, qs, author, current = 0) {
       <div class="qn">Question ${current + 1} of 3</div>
       ${q.image_url ? `<img src="${esc(q.image_url)}" alt="">` : ''}
       <div class="p">${q.prompt ? esc(q.prompt) : '<span class="muted">Your question…</span>'}</div>
-      ${q.kind === 'map' ? '<div class="fake-map">Map without labels</div>' : `<div class="fake-input"><span>Your guess</span><span>${esc(q.unit || '')}</span></div>`}
+      ${inputs[q.kind] || inputs.number}
       <div class="fake-btn">${current === 2 ? 'Review answers' : 'Next'}</div>
     </div>`;
   return el;

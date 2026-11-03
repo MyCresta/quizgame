@@ -10,6 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="widgets.css">
 <style>
   body { font-size: 17px; min-height: 100dvh; }
   .app { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -47,7 +48,8 @@
   .review .row .p { font-size: 14px; color: var(--muted); }
   .review .row .a { font-weight: 700; }
 
-  .qpic { width: 100%; max-height: 260px; object-fit: cover; border-radius: 14px; display: block; background: var(--panel-2); }
+  .qpic { width: 100%; max-height: 260px; object-fit: cover; border-radius: 14px; display: block; background: var(--panel-2); cursor: zoom-in; }
+  .qpic-hint { font-size: 12px; color: var(--muted); margin-top: -8px; }
   .big-emoji { font-size: 56px; line-height: 1; }
   .center { text-align: center; justify-items: center; }
 
@@ -72,7 +74,8 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, distanceKm, store } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml } from './common.js';
+import { createColorPicker, createSortable, createPercent, createTimer } from './widgets.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -176,21 +179,35 @@ function progress(i) {
 function answerText(q) {
   const a = answers[q.id];
   if (!a) return '—';
-  if (q.kind === 'map') return `📍 ${a.lat.toFixed(3)}, ${a.lng.toFixed(3)}`;
-  return `${fmt(a.value)}${q.unit ? ` ${esc(q.unit)}` : ''}`;
+  switch (q.kind) {
+    case 'map': return '📍 Pin placed';
+    case 'percent': return `${a.value} %`;
+    case 'time': return '⏱ Done ✓';
+    case 'color': return `${swatchHtml(a.color)} Colour picked`;
+    case 'order': return a.order.map((it, i) => `${i + 1}. ${esc(it)}`).join('&nbsp; ');
+    default: return `${fmt(a.value)}${q.unit ? ` ${esc(q.unit)}` : ''}`;
+  }
 }
+
+const NEED = { map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
 
 function viewQuestion(i) {
   const q = today.questions[i];
   const a = answers[q.id];
-  const body = q.kind === 'map'
-    ? `<div class="map" id="map-${q.id}"></div><div class="maphint" id="maphint">${a ? 'Pin placed. Tap again to move it.' : 'Tap the map to drop your pin. Pinch to zoom.'}</div>`
-    : `<div class="numwrap"><input id="num" inputmode="decimal" autocomplete="off" placeholder="Your guess" value="${a ? esc(String(a.raw ?? a.value)) : ''}">${q.unit ? `<span class="unit">${esc(q.unit)}</span>` : ''}</div>
-       <div class="preview" id="preview"></div>`;
+  const bodies = {
+    map: `<div class="map" id="map-${q.id}"></div><div class="maphint" id="maphint">${a ? 'Pin placed. Tap again to move it.' : 'Tap the map to drop your pin. Pinch to zoom.'}</div>`,
+    percent: `<div id="w"></div>`,
+    time: `<div id="w"></div>`,
+    color: `<div class="swatch-row"><span class="swatch ${a ? '' : 'empty'}" id="sw" ${a ? `style="background:${esc(a.color)}"` : ''}></span><span class="muted" id="swhint" style="font-size:14px">${a ? 'Your colour' : 'Drag in the box and on the rainbow bar to mix your colour'}</span></div><div id="w"></div>`,
+    order: `<div class="hint muted" style="font-size:14px">Drag the items into the right order (first at the top).</div><div id="w"></div>`,
+    number: `<div class="numwrap"><input id="num" inputmode="decimal" autocomplete="off" placeholder="Your guess" value="${a ? esc(String(a.raw ?? a.value)) : ''}">${q.unit ? `<span class="unit">${esc(q.unit)}</span>` : ''}</div>
+       <div class="preview" id="preview"></div>`,
+  };
+  const body = bodies[q.kind] || bodies.number;
   $('view').innerHTML = `<div class="card">
     ${progress(i)}
     <div class="qnum">Question ${i + 1} of 3</div>
-    ${q.image_url ? `<img class="qpic" src="${esc(q.image_url)}" alt="" onerror="this.remove()">` : ''}
+    ${q.image_url ? `<img class="qpic" id="qpic" src="${esc(q.image_url)}" alt="" onerror="this.nextElementSibling?.remove();this.remove()"><div class="qpic-hint">Tap the picture to see it bigger</div>` : ''}
     <div class="prompt">${esc(q.prompt)}</div>
     ${body}
     <div class="nav">
@@ -202,7 +219,7 @@ function viewQuestion(i) {
   if (q.kind === 'map') {
     if (typeof L === 'undefined') { $('maphint').innerHTML = '<span class="error">The map failed to load. Check your connection and reload.</span>'; }
     else {
-      const m = makeMap($(`map-${q.id}`), { tiles: 'plain' });
+      const m = makeMap($(`map-${q.id}`), { tiles: 'plain', maxZoom: ANSWER_MAX_ZOOM });
       let marker = null;
       const place = (ll) => {
         if (marker) marker.setLatLng(ll); else marker = L.marker(ll, { icon: pin('#ff7a3d', 26) }).addTo(m);
@@ -214,6 +231,19 @@ function viewQuestion(i) {
       m.on('click', (e) => place(e.latlng));
       setTimeout(() => m.invalidateSize(), 50);
     }
+  } else if (q.kind === 'percent') {
+    createPercent($('w'), { value: a?.value ?? null, onChange: (v) => { answers[q.id] = { value: v }; saveDraft(); } });
+  } else if (q.kind === 'time') {
+    createTimer($('w'), { target: q.target, done: !!a, onDone: (secs) => { answers[q.id] = { value: secs }; saveDraft(); } });
+  } else if (q.kind === 'color') {
+    createColorPicker($('w'), { value: a?.color ?? null, onChange: (hex) => {
+      answers[q.id] = { color: hex }; saveDraft();
+      const sw = $('sw'); sw.classList.remove('empty'); sw.style.background = hex; $('swhint').textContent = 'Your colour';
+    } });
+  } else if (q.kind === 'order') {
+    const start = a?.order ?? q.items;
+    answers[q.id] = { order: start.slice() }; saveDraft();
+    createSortable($('w'), start, { onChange: (order) => { answers[q.id] = { order }; saveDraft(); } });
   } else {
     const input = $('num');
     const upd = () => {
@@ -229,9 +259,15 @@ function viewQuestion(i) {
     setTimeout(() => input.focus(), 50);
   }
 
+  const pic = $('qpic');
+  if (pic) pic.onclick = () => {
+    const o = document.createElement('div'); o.className = 'zoom-overlay';
+    o.innerHTML = `<img src="${esc(q.image_url)}" alt="">`; o.onclick = () => o.remove();
+    document.body.appendChild(o);
+  };
   $('back').onclick = () => { step = Math.max(0, i - 1); route(); };
   $('next').onclick = () => {
-    if (!answers[q.id]) { toast(q.kind === 'map' ? 'Drop a pin on the map first' : 'Enter a number first'); return; }
+    if (!answers[q.id]) { toast(NEED[q.kind] || NEED.number); return; }
     step = i + 1; route(); window.scrollTo(0, 0);
   };
 }
@@ -251,7 +287,13 @@ function viewReview() {
     if (missing >= 0) { step = missing; route(); return; }
     $('submit').disabled = true; $('submit').textContent = 'Submitting…';
     try {
-      const payload = qs.map((q) => ({ question_id: q.id, ...(q.kind === 'map' ? { lat: answers[q.id].lat, lng: answers[q.id].lng } : { value: answers[q.id].value }) }));
+      const payload = qs.map((q) => {
+        const a = answers[q.id];
+        if (q.kind === 'map') return { question_id: q.id, lat: a.lat, lng: a.lng };
+        if (q.kind === 'color') return { question_id: q.id, color: a.color };
+        if (q.kind === 'order') return { question_id: q.id, order: a.order };
+        return { question_id: q.id, value: a.value };
+      });
       const result = await rpc('quiz_submit', { p_player: name, p_answers: payload });
       store.set(doneKey(), '1'); store.del(draftKey());
       viewDone(result);
@@ -271,8 +313,8 @@ async function loadYesterday() {
     const me = res.players[idx];
     const lines = res.questions.map((q) => {
       const g = me.guesses.find((x) => x.question_id === q.id);
-      const correct = q.kind === 'map' ? esc(q.answer_label || 'the pin') : `${fmt(q.answer_num)} ${esc(q.unit || '')}`;
-      const yours = q.kind === 'map' ? `${fmt(Math.round(distanceKm(q.answer_lat, q.answer_lng, g.lat, g.lng)))} km off` : `you said ${fmt(g.guess)}`;
+      const correct = answerHtml(q);
+      const yours = q.kind === 'order' ? `you: ${guessHtml(q, g)}` : q.kind === 'map' ? guessHtml(q, g) : `you: ${guessHtml(q, g).replace(/^guessed /, '')}`;
       const src = q.source_url ? ` · <a href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : '';
       return `<div class="line"><span>${q.position}. ${correct}<br><span class="muted">${yours}${src}</span>${q.fact ? `<br><span class="muted" style="font-size:13px">${esc(q.fact)}</span>` : ''}</span><span class="pts">${fmtPts(g.points)}</span></div>`;
     }).join('');

@@ -64,34 +64,47 @@ export function points(scoring, tol, answer, guess) {
   return Math.max(1, Math.min(10000, Math.round(10000 * f ** 1.5)));
 }
 
-// Keyless tile sources. Esri basemaps have no place labels (good for map questions);
-// if a source fails to load, the map switches to OpenStreetMap automatically.
+// Keyless tile sources, tried in order if one fails to load.
+// 'plain' is for answering map questions: no place names in any of its sources, ever.
 const ESRI = (name) => `https://server.arcgisonline.com/ArcGIS/rest/services/${name}/MapServer/tile/{z}/{y}/{x}`;
 const OSM = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const ESRI_ATTR = 'Tiles &copy; Esri';
 export const TILES = {
-  dark: { url: ESRI('Canvas/World_Dark_Gray_Base'), attr: 'Tiles &copy; Esri', maxZoom: 16 },
-  plain: { url: ESRI('Canvas/World_Light_Gray_Base'), attr: 'Tiles &copy; Esri', maxZoom: 16 },
-  satellite: { url: ESRI('World_Imagery'), attr: 'Tiles &copy; Esri', maxZoom: 18 },
-  labels: { url: OSM, attr: OSM_ATTR, maxZoom: 19 },
+  plain: [
+    { url: ESRI('Canvas/World_Light_Gray_Base'), attr: ESRI_ATTR, maxZoom: 16 },
+    { url: ESRI('World_Shaded_Relief'), attr: ESRI_ATTR, maxZoom: 13 },
+  ],
+  dark: [
+    { url: ESRI('Canvas/World_Dark_Gray_Base'), attr: ESRI_ATTR, maxZoom: 16 },
+    { url: OSM, attr: OSM_ATTR, maxZoom: 19 },
+  ],
+  labels: [{ url: OSM, attr: OSM_ATTR, maxZoom: 19 }],
 };
 
-export function makeMap(el, { tiles = 'plain', interactive = true } = {}) {
+// Highest zoom players can use when answering a map question. Low enough that streets and
+// landmarks can't give the answer away, still far more precise than the scoring needs.
+export const ANSWER_MAX_ZOOM = 7;
+
+export function makeMap(el, { tiles = 'plain', interactive = true, maxZoom } = {}) {
+  const sources = TILES[tiles];
+  const cap = maxZoom ?? sources[0].maxZoom;
   const map = L.map(el, {
-    worldCopyJump: true, minZoom: 1, zoomControl: interactive, attributionControl: true,
+    worldCopyJump: true, minZoom: 1, maxZoom: cap, zoomControl: interactive, attributionControl: true,
     dragging: interactive, scrollWheelZoom: interactive, doubleClickZoom: interactive,
     touchZoom: interactive, boxZoom: interactive, keyboard: interactive, tap: interactive,
   }).setView([30, 10], 1);
-  const src = TILES[tiles];
-  let layer = L.tileLayer(src.url, { attribution: src.attr, maxZoom: src.maxZoom }).addTo(map);
-  if (src.url !== OSM) {
-    let errors = 0;
+  let i = 0, errors = 0, layer = null;
+  const use = () => {
+    const src = sources[i];
+    layer = L.tileLayer(src.url, { attribution: src.attr, maxZoom: Math.min(cap, src.maxZoom), maxNativeZoom: src.maxZoom }).addTo(map);
+    errors = 0;
     layer.on('tileerror', () => {
-      if (++errors !== 4) return;
-      map.removeLayer(layer);
-      layer = L.tileLayer(OSM, { attribution: OSM_ATTR, maxZoom: 19 }).addTo(map);
+      if (++errors !== 4 || i >= sources.length - 1) return;
+      map.removeLayer(layer); i++; use();
     });
-  }
+  };
+  use();
   return map;
 }
 
@@ -121,4 +134,37 @@ export const store = {
 
 export function pageUrl(file) {
   return new URL(file, location.href).href;
+}
+
+// ---------- Shared display helpers for every question type ----------
+export const KIND_TAG = {
+  number: '', map: '<span class="tag map">📍 Map</span>', percent: '<span class="tag number">% Percent</span>',
+  time: '<span class="tag map">⏱ Timer</span>', color: '<span class="tag number">🎨 Colour</span>', order: '<span class="tag map">↕ Sort</span>',
+};
+export const swatchHtml = (hex, cls = '') => `<span class="sw ${cls}" style="background:${esc(hex)}"></span>`;
+const secs = (n) => `${(Math.round(n * 100) / 100).toFixed(2)} s`;
+
+// The correct answer, as shown at the reveal
+export function answerHtml(q) {
+  switch (q.kind) {
+    case 'map': return esc(q.answer_label || 'See the map');
+    case 'percent': return `${fmt(q.answer_num)} %`;
+    case 'time': return `${fmt(q.answer_num)} s`;
+    case 'color': return `${swatchHtml(q.answer_color)} <span class="hex">${esc(q.answer_color)}</span>`;
+    case 'order': return (q.answer_items || []).map((it, i) => `<span class="ord"><b>${i + 1}</b> ${esc(it)}</span>`).join(' ');
+    default: return `${fmt(q.answer_num)} ${esc(q.unit || '')}`;
+  }
+}
+
+// One player's guess. g = { guess, lat, lng, json }
+export function guessHtml(q, g) {
+  if (!g) return '';
+  switch (q.kind) {
+    case 'map': return g.lat == null ? '' : `${fmt(Math.round(distanceKm(q.answer_lat, q.answer_lng, g.lat, g.lng)))} km away`;
+    case 'percent': return `${fmt(g.guess)} %`;
+    case 'time': return g.guess == null ? '' : `stopped at ${secs(g.guess)}`;
+    case 'color': return g.json ? `${swatchHtml(g.json)}` : '';
+    case 'order': return Array.isArray(g.json) ? g.json.map((it) => esc(it)).join(' › ') : '';
+    default: return `guessed ${fmt(g.guess)}`;
+  }
 }

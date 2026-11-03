@@ -10,7 +10,13 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
 | `admin.html` | Password-protected: edit, reorder, delete or park sets as backups, fix wrong answers (points are recalculated), remove fake answers. |
 
 ## How it works
-- **Questions**: number questions (with a unit) or "pin it on the map" questions.
+- **Question types** (every answer scores 1–10 000 points, closer = more):
+  - **Number** with a unit (distances, weights, years…)
+  - **Map pin**: players get a map with no place names and limited zoom. Add a photo for "Where was this taken?"
+  - **Percent**: a 0–100 % slider
+  - **Timer**: tap Start, then Stop at exactly N seconds with no clock shown (one try)
+  - **Colour**: mix a colour with a picker (scored by how close it looks, using CIELAB colour distance)
+  - **Sort**: drag 3–6 items into the right order (scored by how many pairs are in the right order)
 - **Scoring**: every answer scores 1–10 000 points, so 30 000 max per day.
   - Number, ratio scoring (default): an exact answer gets 10 000; being off by 10× (Ballpark), ~3× (Tight) or 100× (Loose) gets 1 point.
   - Number, plain difference: the author sets how far off scores 1 point (good for years).

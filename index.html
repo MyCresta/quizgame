@@ -88,6 +88,12 @@
   .r { background: var(--panel); border-radius: var(--radius); padding: 1.1rem 1.3rem; display: grid; grid-template-rows: auto auto 1fr; gap: .4rem; overflow: hidden; position: relative; }
   .r .rq { font-size: 1.05rem; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .r .ans { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; color: var(--gold); }
+  .q .prompt .items { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; font-size: .55em; font-weight: 600; letter-spacing: 0; }
+  .q .prompt .items span { background: var(--panel-2); border-radius: 999px; padding: .2em .7em; color: var(--ink); }
+  .r.kind-color .ans .sw { width: 1.4em; height: 1.1em; vertical-align: -0.12em; }
+  .r .best .sw { width: 1.1em; height: 1.1em; }
+  .r.kind-order .ans { font-size: 1.05rem !important; color: var(--ink); line-height: 1.5; letter-spacing: 0; font-weight: 600; }
+  .r.kind-order .ans .ord { margin-right: .5rem; }
   .r .ans small { font-size: 1.2rem; color: var(--muted); font-weight: 600; margin-left: .3rem; }
   .r .best { font-size: 1.1rem; font-weight: 600; }
   .r .best b { color: var(--mint); }
@@ -225,7 +231,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -267,9 +273,9 @@ function renderQuestions(t) {
   $('questions').innerHTML = qs.map((q) => `
     <div class="q ${q.image_url ? 'has-pic' : ''}">
       <div class="n">${q.position}</div>
-      <div class="prompt">${esc(q.prompt)} ${q.kind === 'map'
-          ? '<span class="tag map">📍 Map</span>'
-          : q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : ''}</div>
+      <div class="prompt">${esc(q.prompt)} ${q.kind === 'number'
+          ? (q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : '')
+          : KIND_TAG[q.kind] || ''}${q.kind === 'order' && q.items ? `<div class="items">${q.items.map((it) => `<span>${esc(it)}</span>`).join('')}</div>` : ''}</div>
       ${q.image_url ? `<img class="pic" src="${esc(q.image_url)}" alt="" onerror="this.remove();this.parentElement?.classList.remove('has-pic')">` : ''}
     </div>`).join('');
 }
@@ -406,10 +412,16 @@ function renderResults(res) {
         <div class="mini" id="mini-${q.id}"></div>
       </div>`;
     }
-    return `<div class="r">
+    const who = b ? `Closest: <b>${esc(b.player)}</b>` : '';
+    const g = b ? guessHtml(q, { guess: b.guess, lat: b.lat, lng: b.lng, json: b.json }) : '';
+    const best = !b ? '' : q.kind === 'order' ? `${who} · ${fmtPts(b.points)}`
+      : q.kind === 'color' ? `${who} ${g} · ${fmtPts(b.points)}`
+      : q.kind === 'number' ? `${who} ${g} · ${fmtPts(b.points)}`
+      : `${who}, ${g} · ${fmtPts(b.points)}`;
+    return `<div class="r kind-${q.kind}">
       <div class="rq">${q.position}. ${esc(q.prompt)}</div>
-      <div class="ans num">${fmt(q.answer_num)}<small>${esc(q.unit || '')}</small></div>
-      <div class="best">${b ? `Closest: <b>${esc(b.player)}</b> guessed <span class="num">${fmt(b.guess)}</span> · ${fmtPts(b.points)}` : ''}</div>
+      <div class="ans num">${q.kind === 'number' ? `${fmt(q.answer_num)}<small>${esc(q.unit || '')}</small>` : answerHtml(q)}</div>
+      <div class="best">${best}</div>
       <div class="fact">${factLine(q)}</div>
     </div>`;
   }).join('');

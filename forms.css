@@ -48,3 +48,17 @@ details.more > div { display: grid; gap: 14px; }
 .pv-phone .fake-input { background: var(--panel-2); border-radius: 10px; padding: 10px; color: var(--muted); font-size: 14px; display: flex; justify-content: space-between; }
 .pv-phone .fake-map { height: 90px; border-radius: 10px; background: linear-gradient(135deg, #d9dde3, #b9c0c9); display: grid; place-items: center; color: #55606e; font-size: 12px; font-weight: 700; }
 .pv-phone .fake-btn { background: var(--accent); color: var(--accent-ink); border-radius: 10px; padding: 9px; text-align: center; font-weight: 700; font-size: 14px; }
+
+/* Question type picker: 6 types in a 3×2 grid */
+.seg.seg-kinds { grid-template-columns: repeat(3, 1fr); }
+.seg.seg-kinds button { padding: 9px 4px; font-size: 14px; }
+.pv-items { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pv-items span { font-size: 10px; font-weight: 600; background: var(--panel-2); border-radius: 999px; padding: 1px 6px; }
+.fake-pct { display: grid; gap: 6px; text-align: center; }
+.fake-pct b { font-size: 22px; }
+.fake-pct span { height: 8px; border-radius: 4px; background: linear-gradient(to right, var(--accent) 50%, var(--panel-2) 50%); }
+.fake-timer { justify-self: center; width: 70px; height: 70px; border-radius: 50%; background: var(--mint); color: #062018; display: grid; place-items: center; font-weight: 800; }
+.fake-color { height: 80px; border-radius: 10px; background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(150, 100%, 50%)); }
+.fake-sort { display: grid; gap: 4px; }
+.fake-sort span { background: var(--panel-2); border-radius: 8px; padding: 6px 8px; font-size: 12px; font-weight: 600; }
+.fake-sort b { color: var(--accent); margin-right: 4px; }

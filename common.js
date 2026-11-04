@@ -82,9 +82,10 @@ export const TILES = {
   labels: [{ url: OSM, attr: OSM_ATTR, maxZoom: 19 }],
 };
 
-// Highest zoom players can use when answering a map question. Low enough that streets and
-// landmarks can't give the answer away, still far more precise than the scoring needs.
-export const ANSWER_MAX_ZOOM = 7;
+// Highest zoom players can use when answering a map question. The 'plain' maps never contain
+// place names at any zoom (Esri keeps labels in a separate reference layer we don't load),
+// so players can zoom in to street level to place their pin precisely.
+export const ANSWER_MAX_ZOOM = 16;
 
 export function makeMap(el, { tiles = 'plain', interactive = true, maxZoom } = {}) {
   const sources = TILES[tiles];

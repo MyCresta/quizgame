@@ -12,7 +12,7 @@ const RADIUS = [[300, 'Within 300 km (same region)'], [1000, 'Within 1 000 km (s
 // Strictness presets for the other types: value = how far off scores 1 point
 const PCT_TOL = [[15, 'Tight: 15 percentage points off scores 1 point'], [30, 'Normal: 30 points off scores 1 point'], [50, 'Loose: 50 points off scores 1 point']];
 const TIME_TOL = [[0.15, 'Tight: 15 % of the target off scores 1 point'], [0.3, 'Normal: 30 % off scores 1 point'], [0.5, 'Loose: 50 % off scores 1 point']];
-const COLOR_TOL = [[40, 'Tight: only very close shades score well'], [60, 'Normal'], [90, 'Loose: same colour family scores well']];
+const COLOR_TOL = [[50, 'Tight: only close shades score well'], [70, 'Normal: any shade of the right colour scores well'], [100, 'Loose: generous for neighbouring colours too']];
 
 export const KINDS = [
   ['number', '# Number'], ['map', '📍 Map pin'], ['percent', '% Percent'],
@@ -80,7 +80,7 @@ function block(uid, i) {
       <div class="swatch-row"><span class="swatch empty" data-f="csw"></span>
         <label class="field" style="flex:1"><span>Correct colour (hex code)</span><input class="input num" data-f="hex" maxlength="7" placeholder="#1db954"></label></div>
       <div data-f="picker"></div>
-      <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="coltol">${opts(COLOR_TOL, 60)}</select></label>
+      <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="coltol">${opts(COLOR_TOL, 70)}</select></label>
       <div class="hint">Tip: search “Spotify green hex” to get the exact code. Players mix the colour with a picker, no codes allowed.</div>
     </div>
 

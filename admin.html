@@ -222,7 +222,7 @@ async function loadScreenCard() {
   const card = $('screenCard');
   try {
     const r = await admin('screen');
-    const url = new URL(`index.html?screen=${r.screen_key}`, location.href).href;
+    const url = new URL(`./?screen=${r.screen_key}`, location.href).href;
     card.innerHTML = `<h2>Office screen</h2>
       <p class="hint">Use this address in the screen's web page template in Dise. It contains a secret key, so don't share it. The QR code on that screen carries a code that changes every day.</p>
       <div class="search"><input class="input num" id="screenUrl" readonly value="${esc(url)}"><button type="button" class="btn ghost" id="copyUrl">Copy</button></div>

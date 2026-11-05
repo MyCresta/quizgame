@@ -259,7 +259,8 @@ const screenKey = ((location.href.match(/[?&#]screen=([0-9a-f]{24})/i) || [])[1]
 function setPlayQr(code) {
   const playUrl = pageUrl('play.html') + (code ? `?c=${encodeURIComponent(code)}` : '');
   $('qr').innerHTML = qrSvg(playUrl);
-  $('playUrl').textContent = pageUrl('play.html').replace(/^https?:\/\//, '');
+  // A typed address can't carry the daily code, so only show it when the check is off.
+  $('playUrl').textContent = code ? '' : pageUrl('play.html').replace(/^https?:\/\//, '');
 }
 
 // Shown when the join-code check is on and this browser isn't the office screen.
@@ -479,7 +480,7 @@ async function refreshToday() {
 
 async function refreshAll() {
   const [t, sb, res, scr] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard'), rpc('quiz_results'), rpc('quiz_screen', { p_key: screenKey }).catch(() => null)]);
-  if (scr) { if (scr.enforced && !scr.valid) { location.reload(); return; } setPlayQr(scr.code); }
+  if (scr) { if (scr.enforced && !scr.valid) { location.reload(); return; } setPlayQr(scr.enforced ? scr.code : null); }
   today = t;
   renderToday(t); renderBoard(sb); renderResults(res);
 }
@@ -505,7 +506,7 @@ async function boot() {
   let scr = { enforced: false, valid: false, code: null };
   try { scr = await rpc('quiz_screen', { p_key: screenKey }); } catch (e) { console.error(e); }
   if (scr.enforced && !scr.valid) { showLocked(); return; }
-  setPlayQr(scr.code);
+  setPlayQr(scr.enforced ? scr.code : null);
   safely(refreshAll);
   setInterval(() => safely(refreshToday), 20_000);       // new answers + live scoreboard
   setInterval(() => safely(refreshAll), 10 * 60_000);    // board + results

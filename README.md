@@ -17,8 +17,9 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
   - **Timer**: tap Start, then Stop at exactly N seconds with no clock shown (one try)
   - **Colour**: mix a colour with a picker (scored by how close it looks: CIEDE2000 colour difference plus a penalty for the wrong colour family, so any shade of the right colour scores well)
   - **Sort**: drag 3–6 items into the right order (scored by how many pairs are in the right order)
-  - **Rhythm**: tap a famous rhythm (a chorus line, riff or intro) from memory. The author records the real rhythm by
-    tapping along to the song; players see how many taps and a hint, practise on "shave and a haircut", then tap it.
+  - **Rhythm**: tap a famous rhythm from memory. The author says exactly what to tap: either sung words (typed with
+    dashes between syllables, shown to players as boxes that light up per tap) or something else ("the whistling at the
+    very start"), and records the real rhythm by tapping along. Players practise on "shave and a haircut", then tap it.
     Scored half on speed (total length) and half on rhythm (the gaps). Test it in Admin → Try it.
 - **Scoring**: every answer scores 1–10 000 points, so 30 000 max per day.
   - Number, ratio scoring (default): an exact answer gets 10 000; being off by 10× (Ballpark), ~3× (Tight) or 100× (Loose) gets 1 point.

@@ -73,3 +73,9 @@
 .tmp-verdict { font-size: 14px; }
 .tmp-feedback .rtl { margin: 4px 0; }
 .tmp-feedback { min-height: 2.6em; width: 100%; max-width: 360px; }
+
+.tmp-what { display: grid; gap: 6px; justify-items: center; font-size: 15px; color: var(--muted); }
+.tmp-what-big { font-size: 20px; font-weight: 800; color: var(--ink); line-height: 1.25; }
+.tmp-words { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.tmp-words span { background: var(--panel-2); border-radius: 10px; padding: 8px 10px; font-weight: 800; font-size: 18px; transition: background .08s, color .08s; }
+.tmp-words span.on { background: var(--accent); color: var(--accent-ink); }

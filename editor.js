@@ -1,6 +1,6 @@
 // The 3-question set editor, shared by the "add" page and the admin page.
 import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js';
-import { createColorPicker, hexToRgb, createRecorder } from './widgets.js';
+import { createColorPicker, hexToRgb, createRecorder, syllables } from './widgets.js';
 
 export const SCORING = [
   { id: 'r1', label: 'Ballpark: 10× off scores 1 point', scoring: 'ratio', tol: 1 },
@@ -88,10 +88,17 @@ function block(uid, i) {
     </div>
 
     <div data-part="tempo" class="hidden" style="display:grid;gap:14px">
+      <div class="field"><span>What should players tap?</span>
+        <div class="seg" data-f="tapmode"><button type="button" data-m="words" class="on">Sung words</button><button type="button" data-m="other">Something else</button></div></div>
+      <div data-part="tm-words" style="display:grid;gap:8px">
+        <label class="field"><span>The words, with dashes between syllables</span><input class="input" data-f="words" maxlength="120" placeholder="e.g. Stay-in' a-live"></label>
+        <div class="tmp-words" data-f="wordchips"></div>
+        <div class="hint" data-f="wordhint">Players see these boxes light up, one per tap.</div>
+      </div>
+      <label class="field hidden" data-part="tm-other"><span>What to tap (shown big to players)</span><input class="input" data-f="hint" maxlength="80" placeholder="e.g. Tap along with the whistling at the very start"></label>
       <div class="field"><span>Record the real rhythm</span><div data-f="recorder"></div></div>
-      <label class="field"><span>Which part to tap (shown to players)</span><input class="input" data-f="hint" maxlength="80" placeholder="e.g. One tap per syllable of the chorus line"></label>
       <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="tempotol">${opts(TEMPO_TOL, 0.5)}</select></label>
-      <div class="hint">Players see how many taps the rhythm has and your hint, then tap it from memory. They score on speed (total length) and rhythm (the gaps between taps). Keep it short and famous: a chorus line, a riff, an intro.</div>
+      <div class="hint">Play the song and tap along with exactly what players will tap. They see the number of taps, then tap it from memory, and score on speed (total length) and rhythm (the gaps).</div>
     </div>
 
     <div data-part="order" class="hidden" style="display:grid;gap:12px">
@@ -158,10 +165,25 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
   }
 
   // ---- rhythm ----
+  function setTapMode(i, m) {
+    state[i].tapMode = m;
+    f(i, 'tapmode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.m === m));
+    part(i, 'tm-words').classList.toggle('hidden', m !== 'words');
+    part(i, 'tm-other').classList.toggle('hidden', m !== 'other');
+    checkWords(i); onChange();
+  }
+  function checkWords(i) {
+    const w = syllables(f(i, 'words').value);
+    f(i, 'wordchips').innerHTML = w.map((x) => `<span>${esc(x)}</span>`).join('');
+    const rec = state[i].rhythm;
+    f(i, 'wordhint').innerHTML = !w.length ? 'Players see these boxes light up, one per tap.'
+      : rec && rec.length !== w.length ? `<span class="error">${w.length} syllables, but the recording has ${rec.length} taps. Record again, one tap per syllable.</span>`
+      : `${w.length} syllable${w.length === 1 ? '' : 's'}${rec ? ' ✓ matches the recording' : ': record one tap per syllable'}.`;
+  }
   function ensureRecorder(i, initial = null) {
     if (state[i].recorder && !initial) return;
     state[i].rhythm = initial;
-    state[i].recorder = createRecorder(f(i, 'recorder'), { initial, onChange: (r) => { state[i].rhythm = r; onChange(); } });
+    state[i].recorder = createRecorder(f(i, 'recorder'), { initial, onChange: (r) => { state[i].rhythm = r; checkWords(i); onChange(); } });
   }
 
   // ---- colour ----
@@ -253,6 +275,9 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     f(i, 'pcttol').addEventListener('change', () => updatePctPreview(i));
     f(i, 'secs').addEventListener('input', () => { updateTimePreview(i); onChange(); });
     f(i, 'hint').addEventListener('input', onChange);
+    f(i, 'words').addEventListener('input', () => { checkWords(i); onChange(); });
+    f(i, 'tapmode').querySelectorAll('button').forEach((b) => b.onclick = () => setTapMode(i, b.dataset.m));
+    state[i].tapMode = 'words';
     f(i, 'timetol').addEventListener('change', () => updateTimePreview(i));
     f(i, 'hex').addEventListener('input', () => {
       let v = f(i, 'hex').value.trim();
@@ -278,8 +303,9 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
         prompt: f(i, 'prompt').value.trim(),
         unit: k === 'number' ? f(i, 'unit').value.trim() : '',
         target: k === 'time' ? parseNumber(f(i, 'secs').value) : null,
-        hint: k === 'tempo' ? f(i, 'hint').value.trim() : '',
+        hint: k === 'tempo' && state[i].tapMode !== 'words' ? f(i, 'hint').value.trim() : '',
         taps: k === 'tempo' ? state[i].rhythm?.length : null,
+        words: k === 'tempo' && state[i].tapMode === 'words' ? syllables(f(i, 'words').value) : null,
         items: items ? items.slice().reverse() : null,   // shown shuffled to players; reversed is a fine stand-in
         image_url: state[i].imageOk ? f(i, 'imgurl').value.trim() : '',
       };
@@ -316,7 +342,16 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
       }
       if (k === 'tempo') {
         if (!state[i].rhythm) throw new Error(`Question ${n}: record the rhythm by tapping along to the song`);
-        return { kind: 'tempo', prompt, rhythm: state[i].rhythm, hint: f(i, 'hint').value.trim(), tolerance: +f(i, 'tempotol').value, ...extras };
+        const base = { kind: 'tempo', prompt, rhythm: state[i].rhythm, tolerance: +f(i, 'tempotol').value, ...extras };
+        if (state[i].tapMode === 'words') {
+          const w = syllables(f(i, 'words').value);
+          if (!w.length) throw new Error(`Question ${n}: type the words players should tap, with dashes between syllables`);
+          if (w.length !== state[i].rhythm.length) throw new Error(`Question ${n}: ${w.length} syllables but ${state[i].rhythm.length} recorded taps. Record again, one tap per syllable.`);
+          return { ...base, words: w, hint: '' };
+        }
+        const hint = f(i, 'hint').value.trim();
+        if (!hint) throw new Error(`Question ${n}: say what players should tap, for example the whistling at the start`);
+        return { ...base, hint };
       }
       if (k === 'color') {
         let hex = f(i, 'hex').value.trim().toLowerCase();
@@ -374,6 +409,8 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
       } else if (q.kind === 'tempo') {
         ensureRecorder(i, q.items);
         f(i, 'hint').value = q.label || '';
+        f(i, 'words').value = (q.words || []).join('-');
+        setTapMode(i, q.words?.length ? 'words' : 'other');
         f(i, 'tempotol').value = String(nearest(TEMPO_TOL, q.tolerance));
       } else if (q.kind === 'color') {
         f(i, 'hex').value = q.color || '';
@@ -409,7 +446,7 @@ export function renderPreview(el, qs, author, current = 0) {
     percent: '<div class="fake-pct"><b>50 %</b><span></span></div>',
     time: `<div class="fake-timer">Start</div><div class="muted" style="font-size:11px;text-align:center">Stop at ${q.target ? fmt(q.target) : '?'} s</div>`,
     color: '<div class="fake-color"></div>',
-    tempo: `<div class="fake-timer" style="background:var(--accent);color:var(--accent-ink)">Tap</div><div class="muted" style="font-size:11px;text-align:center">Practice first, then tap ${q.taps || '?'} times${q.hint ? ` · ${esc(q.hint)}` : ''}</div>`,
+    tempo: `${q.words?.length ? `<div class="tmp-words" style="gap:3px">${q.words.map((w) => `<span style="font-size:11px;padding:3px 5px">${esc(w)}</span>`).join('')}</div>` : `<div style="font-size:12px;font-weight:700;text-align:center">👉 ${esc(q.hint || 'What to tap…')}</div>`}<div class="fake-timer" style="background:var(--accent);color:var(--accent-ink)">Tap</div><div class="muted" style="font-size:11px;text-align:center">Practice first, then ${q.taps || '?'} taps from memory</div>`,
     order: `<div class="fake-sort">${(q.items?.length ? q.items : ['Item', 'Item', 'Item']).map((it, k) => `<span><b>${k + 1}</b> ${esc(it)}</span>`).join('')}</div>`,
     number: `<div class="fake-input"><span>Your guess</span><span>${esc(q.unit || '')}</span></div>`,
   };

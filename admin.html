@@ -95,7 +95,7 @@
 <script type="module">
 import { CONFIG } from './config.js';
 import { rpc, fmt, fmtDate, esc, swatchHtml, fmtPts, store, rhythmPoints, rhythmVerdict, rhythmTimeline } from './common.js';
-import { createRhythm, createRecorder, PRACTICE_RHYTHM } from './widgets.js';
+import { createRhythm, createRecorder, PRACTICE_RHYTHM, syllables } from './widgets.js';
 import { createSetEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
@@ -141,7 +141,7 @@ function answerText(q) {
     case 'map': return `📍 ${esc(q.label || `${q.lat?.toFixed(3)}, ${q.lng?.toFixed(3)}`)}`;
     case 'percent': return `${fmt(q.answer)} %`;
     case 'time': return `⏱ ${fmt(q.answer)} s`;
-    case 'tempo': return `🥁 ${(q.items || []).length} taps · ${((q.answer || 0) / 1000).toFixed(1)} s${q.label ? ` · hint: ${esc(q.label)}` : ''}`;
+    case 'tempo': return `🥁 ${(q.items || []).length} taps · ${((q.answer || 0) / 1000).toFixed(1)} s · ${q.words?.length ? esc(q.words.join('-')) : `tap: ${esc(q.label || '')}`}`;
     case 'color': return `${swatchHtml(q.color)} ${esc(q.color)}`;
     case 'order': return (q.items || []).map((it, i) => `${i + 1}. ${esc(it)}`).join(' › ');
     default: return `${fmt(q.answer)} ${esc(q.unit || '')}`;
@@ -197,8 +197,9 @@ function render() {
     </div>
     <div class="card"><h2>Record a song to test</h2>
       <p class="hint">Start the song on Spotify or YouTube, then tap along with the part you want (for example one tap per syllable of the chorus line). Saved on this device only.</p>
-      <div class="row2"><label class="field"><span>Song</span><input class="input" id="trySong" placeholder="e.g. Another One Bites the Dust – Queen"></label>
-      <label class="field"><span>Which part (hint)</span><input class="input" id="tryHint" placeholder="e.g. The title line, one tap per syllable"></label></div>
+      <label class="field"><span>Song</span><input class="input" id="trySong" placeholder="e.g. Wind of Change – Scorpions"></label>
+      <div class="row2"><label class="field"><span>Sung words, with dashes (or leave empty)</span><input class="input" id="tryWords" placeholder="e.g. Stay-in' a-live"></label>
+      <label class="field"><span>…or what to tap</span><input class="input" id="tryHint" placeholder="e.g. The whistling at the very start"></label></div>
       <div id="tryRecorder"></div>
       <button type="button" class="btn" id="trySave">Save and test it</button>
     </div>
@@ -271,7 +272,10 @@ function setupTry() {
   $('trySave').onclick = () => {
     if (!$('trySong').value.trim()) { toast('Name the song first'); return; }
     if (!rec) { toast('Record the rhythm first: tap along while the song plays'); return; }
-    const t = { song: $('trySong').value.trim(), hint: $('tryHint').value.trim(), rhythm: rec };
+    const words = syllables($('tryWords').value);
+    if (words.length && words.length !== rec.length) { toast(`${words.length} syllables but ${rec.length} taps recorded. Record again, one tap per syllable.`); return; }
+    if (!words.length && !$('tryHint').value.trim()) { toast('Type the sung words, or say what to tap'); return; }
+    const t = { song: $('trySong').value.trim(), hint: $('tryHint').value.trim(), words: words.length ? words : null, rhythm: rec };
     saveTries([...loadTries(), t]); renderList(); openTry(t);
   };
   renderList();
@@ -286,7 +290,7 @@ function openTry(t) {
     <div id="tryResult"></div>
   </div>`;
   createRhythm($('tryWidget'), {
-    count: t.rhythm.length, hint: t.hint,
+    count: t.rhythm.length, hint: t.hint, words: t.words,
     onDone: (taps) => {
       const pts = rhythmPoints(t.rhythm, taps, 0.5);
       $('tryResult').innerHTML = `<div class="try-result">

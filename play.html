@@ -252,7 +252,7 @@ function viewQuestion(i) {
   } else if (q.kind === 'time') {
     createTimer($('w'), { target: q.target, done: !!a, onDone: (secs) => { answers[q.id] = { value: secs }; saveDraft(); } });
   } else if (q.kind === 'tempo') {
-    createRhythm($('w'), { count: q.taps, hint: q.hint, done: !!a, onDone: (taps) => { answers[q.id] = { taps }; saveDraft(); } });
+    createRhythm($('w'), { count: q.taps, hint: q.hint, words: q.words, done: !!a, onDone: (taps) => { answers[q.id] = { taps }; saveDraft(); } });
   } else if (q.kind === 'color') {
     createColorPicker($('w'), { value: a?.color ?? null, onChange: (hex) => {
       answers[q.id] = { color: hex }; saveDraft();

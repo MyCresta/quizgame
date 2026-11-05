@@ -192,16 +192,22 @@ function playRhythm(circle, ref, onEnd) {
   return () => timers.forEach(clearTimeout);
 }
 
-export function createRhythm(el, { count, hint = '', done = false, onDone = () => {} } = {}) {
+// words: syllables to show karaoke-style (one tap per syllable); otherwise `hint` says what to tap.
+export function syllables(text) {
+  return String(text || '').trim().split(/[\s\-·]+/).map((x) => x.trim()).filter(Boolean);
+}
+
+export function createRhythm(el, { count, hint = '', words = null, done = false, onDone = () => {} } = {}) {
   let stage = done ? 'done' : 'practice';
   let cancelDemo = () => {};
 
-  function collectTaps(circle, n, counter, fb, finish) {
+  function collectTaps(circle, n, counter, fb, finish, onTap = () => {}) {
     let taps = [];
     circle.addEventListener('pointerdown', (e) => {
       e.preventDefault(); ripple(circle);
       if (taps.length && e.timeStamp - taps[taps.length - 1] > MAX_PAUSE) { taps = []; fb.textContent = 'That pause was long, so we started over.'; }
       taps.push(e.timeStamp);
+      onTap(taps.length);
       counter.textContent = `${taps.length} / ${n}`;
       if (taps.length === 1) fb.textContent = 'Keep going…';
       if (taps.length === n) { const rel = taps.map((t) => Math.round(t - taps[0])); taps = []; finish(rel); }
@@ -241,17 +247,22 @@ export function createRhythm(el, { count, hint = '', done = false, onDone = () =
       return;
     }
     if (stage === 'turn') {
+      const what = words?.length
+        ? `<div class="tmp-what"><span>Sing it in your head and tap <b>once per syllable</b>:</span></div>
+           <div class="tmp-words">${words.map((w, k) => `<span data-k="${k}">${esc(w)}</span>`).join('')}</div>`
+        : `<div class="tmp-what"><span class="tmp-what-big">👉 ${esc(hint || 'Tap the rhythm')}</span><span>${count} taps, from memory</span></div>`;
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">2 · Your turn</div>
-        <p class="tmp-text">Hum the song in your head${hint ? ` <span class="tmp-hint">(${esc(hint)})</span>` : ''} and tap its rhythm: <b>${count} taps</b>, one per note. <b>Your first tap starts it</b>, no rush.</p>
+        ${what}
         ${tapCircle('go', 'Tap', `0 / ${count}`)}
-        <div class="tmp-feedback" aria-live="polite">&nbsp;</div>
+        <div class="tmp-feedback" aria-live="polite">Your first tap starts it, no rush.</div>
         <button type="button" class="btn ghost block" data-a="practice">← Practice again</button>
       </div>`;
       const circle = el.querySelector('.tmp-circle');
+      const lightUp = (k) => el.querySelectorAll('.tmp-words span').forEach((sp) => sp.classList.toggle('on', +sp.dataset.k < k));
       collectTaps(circle, count, el.querySelector('.tmp-count'), el.querySelector('.tmp-feedback'), (taps) => {
         onDone(taps); stage = 'done'; navigator.vibrate?.(30); render();
-      });
+      }, lightUp);
       el.querySelector('[data-a="practice"]').onclick = () => { stage = 'practice'; render(); };
       return;
     }

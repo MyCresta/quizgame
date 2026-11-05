@@ -68,3 +68,8 @@
 .tmp-circle.hit { animation: tmp-hit .18s ease-out; }
 @keyframes tmp-hit { 50% { transform: scale(.94); } }
 .tmp-feedback { font-size: 14px; min-height: 2.6em; max-width: 320px; line-height: 1.4; }
+
+.tmp-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; justify-self: stretch; }
+.tmp-verdict { font-size: 14px; }
+.tmp-feedback .rtl { margin: 4px 0; }
+.tmp-feedback { min-height: 2.6em; width: 100%; max-width: 360px; }

@@ -54,3 +54,8 @@ textarea.input { resize: vertical; min-height: 4.5em; }
 .ord b { color: var(--accent); }
 .zoom-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 2000; display: grid; place-items: center; padding: 16px; cursor: zoom-out; }
 .zoom-overlay img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+
+.rtl { display: block; }
+.rtl-lbl { fill: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.rtl-ref { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.rtl-tap { fill: var(--mint); }

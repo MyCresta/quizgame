@@ -140,7 +140,7 @@ export function pageUrl(file) {
 // ---------- Shared display helpers for every question type ----------
 export const KIND_TAG = {
   number: '', map: '<span class="tag map">📍 Map</span>', percent: '<span class="tag number">% Percent</span>',
-  time: '<span class="tag map">⏱ Timer</span>', tempo: '<span class="tag map">🥁 Tempo</span>', color: '<span class="tag number">🎨 Colour</span>', order: '<span class="tag map">↕ Sort</span>',
+  time: '<span class="tag map">⏱ Timer</span>', tempo: '<span class="tag map">🥁 Rhythm</span>', color: '<span class="tag number">🎨 Colour</span>', order: '<span class="tag map">↕ Sort</span>',
 };
 export const swatchHtml = (hex, cls = '') => `<span class="sw ${cls}" style="background:${esc(hex)}"></span>`;
 const secs = (n) => `${(Math.round(n * 100) / 100).toFixed(2)} s`;
@@ -151,7 +151,7 @@ export function answerHtml(q) {
     case 'map': return esc(q.answer_label || 'See the map');
     case 'percent': return `${fmt(q.answer_num)} %`;
     case 'time': return `${fmt(q.answer_num)} s`;
-    case 'tempo': return `${Math.round(q.answer_num)} BPM`;
+    case 'tempo': return q.answer_items ? rhythmTimeline(q.answer_items, null, { compact: true }) : '';
     case 'color': return `${swatchHtml(q.answer_color)} <span class="hex">${esc(q.answer_color)}</span>`;
     case 'order': return (q.answer_items || []).map((it, i) => `<span class="ord"><b>${i + 1}</b> ${esc(it)}</span>`).join(' ');
     default: return `${fmt(q.answer_num)} ${esc(q.unit || '')}`;
@@ -165,17 +165,50 @@ export function guessHtml(q, g) {
     case 'map': return g.lat == null ? '' : `${fmt(Math.round(distanceKm(q.answer_lat, q.answer_lng, g.lat, g.lng)))} km away`;
     case 'percent': return `${fmt(g.guess)} %`;
     case 'time': return g.guess == null ? '' : `stopped at ${secs(g.guess)}`;
-    case 'tempo': return g.guess == null ? '' : `tapped ${Math.round(g.guess)} BPM`;
+    case 'tempo': return Array.isArray(g.json) && q.answer_items ? rhythmVerdict(q.answer_items, g.json) : '';
     case 'color': return g.json ? `${swatchHtml(g.json)}` : '';
     case 'order': return Array.isArray(g.json) ? g.json.map((it) => esc(it)).join(' › ') : '';
     default: return `guessed ${fmt(g.guess)}`;
   }
 }
 
-// Mirror of the database tempo scoring (log2 distance; half or double speed earns 80 %)
-export function tempoPoints(target, bpm, tol = 0.5) {
-  if (!(bpm > 0)) return 1;
-  const sc = (e) => Math.max(0, 1 - e / tol) ** 1.5;
-  const f = Math.max(sc(Math.abs(Math.log2(bpm / target))), 0.8 * sc(Math.abs(Math.log2(2 * bpm / target))), 0.8 * sc(Math.abs(Math.log2(bpm / (2 * target)))));
-  return Math.max(1, Math.min(10000, Math.round(10000 * f)));
+// ---------- Tap the rhythm ----------
+// Mirror of the database scoring: half speed (total length) + half rhythm (shape of the gaps).
+export function rhythmPoints(ref, taps, tol = 0.5) {
+  const n = ref.length;
+  if (!taps || taps.length !== n || n < 2) return 1;
+  const dr = ref[n - 1] - ref[0], du = taps[n - 1] - taps[0];
+  if (!(du > 0) || !(dr > 0)) return 1;
+  const st = Math.max(0, 1 - Math.abs(Math.log2(du / dr)) / tol) ** 1.5;
+  let err = 0;
+  for (let i = 1; i < n - 1; i++) err += Math.abs((ref[i] - ref[0]) / dr - (taps[i] - taps[0]) / du);
+  if (n > 2) err /= n - 2;
+  const ss = Math.max(0, 1 - err / (tol * 0.2));
+  return Math.max(1, Math.min(10000, Math.round(10000 * (0.5 * st + 0.5 * ss))));
+}
+
+export function rhythmVerdict(ref, taps) {
+  const n = ref.length;
+  const dr = ref[n - 1], du = taps[n - 1] - taps[0];
+  const ratio = du / dr;
+  let err = 0;
+  for (let i = 1; i < n - 1; i++) err += Math.abs(ref[i] / dr - (taps[i] - taps[0]) / du);
+  if (n > 2) err /= n - 2;
+  const speed = Math.abs(ratio - 1) < 0.05 ? '<b>right speed</b>' : `<b>${Math.round(Math.abs(ratio - 1) * 100)} % too ${ratio < 1 ? 'fast' : 'slow'}</b>`;
+  const shape = err < 0.03 ? '<b>rhythm spot on</b>' : err < 0.07 ? '<b>rhythm close</b>' : '<b>rhythm a bit off</b>';
+  return `${speed}, ${shape}`;
+}
+
+// Timeline: orange = the real rhythm, green = taps (both start at the first tap).
+export function rhythmTimeline(ref, taps, { compact = false } = {}) {
+  const end = Math.max(ref[ref.length - 1], taps ? taps[taps.length - 1] : 0) * 1.04 + 1;
+  const W = 340, L = 6, x = (ms) => L + (ms / end) * (W - 2 * L);
+  const H = taps ? (compact ? 46 : 78) : 34;
+  const rowR = compact ? 14 : 22, rowY = compact ? 36 : 58;
+  return `<svg class="rtl" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Rhythm timeline">
+    ${compact ? '' : `<text x="${L}" y="9" class="rtl-lbl">Real rhythm</text>`}
+    ${ref.map((ms) => `<line x1="${x(ms)}" x2="${x(ms)}" y1="${rowR - 9}" y2="${rowR + 9}" class="rtl-ref"/>`).join('')}
+    ${taps ? taps.map((ms) => `<circle cx="${x(ms)}" cy="${rowY}" r="${compact ? 4 : 5.5}" class="rtl-tap"/>`).join('') : ''}
+    ${taps && !compact ? `<text x="${L}" y="${H - 1}" class="rtl-lbl">Taps</text>` : ''}
+  </svg>`;
 }

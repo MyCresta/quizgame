@@ -1,6 +1,6 @@
 // The 3-question set editor, shared by the "add" page and the admin page.
-import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG, tempoPoints } from './common.js';
-import { createColorPicker, hexToRgb, tempoFromTaps } from './widgets.js';
+import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js';
+import { createColorPicker, hexToRgb, createRecorder } from './widgets.js';
 
 export const SCORING = [
   { id: 'r1', label: 'Ballpark: 10× off scores 1 point', scoring: 'ratio', tol: 1 },
@@ -12,13 +12,13 @@ const RADIUS = [[300, 'Within 300 km (same region)'], [1000, 'Within 1 000 km (s
 // Strictness presets for the other types: value = how far off scores 1 point
 const PCT_TOL = [[15, 'Tight: 15 percentage points off scores 1 point'], [30, 'Normal: 30 points off scores 1 point'], [50, 'Loose: 50 points off scores 1 point']];
 const TIME_TOL = [[0.15, 'Tight: 15 % of the target off scores 1 point'], [0.3, 'Normal: 30 % off scores 1 point'], [0.5, 'Loose: 50 % off scores 1 point']];
-const TEMPO_TOL = [[0.3, 'Tight: only a few % off scores well'], [0.5, 'Normal'], [0.8, 'Loose']];
+const TEMPO_TOL = [[0.3, 'Tight: speed and rhythm must be close'], [0.5, 'Normal'], [0.8, 'Loose']];
 const COLOR_TOL = [[50, 'Tight: only close shades score well'], [70, 'Normal: any shade of the right colour scores well'], [100, 'Loose: generous for neighbouring colours too']];
 
 export const KINDS = [
   ['number', '# Number'], ['map', '📍 Map pin'], ['percent', '% Percent'],
   ['time', '⏱ Timer'], ['color', '🎨 Colour'], ['order', '↕ Sort'],
-  ['tempo', '🥁 Tempo'],
+  ['tempo', '🥁 Rhythm'],
 ];
 const PLACEHOLDERS = {
   number: ['How far is it between our Stockholm and Gothenburg offices?', 'How many rolls of toilet paper does a person use in a lifetime?', 'How much does an average adult elephant weigh?'],
@@ -27,7 +27,7 @@ const PLACEHOLDERS = {
   time: ['Stop the clock at exactly 10 seconds'],
   color: ['Pick the exact Spotify green'],
   order: ['Sort these buildings by height, tallest first'],
-  tempo: ['Tap the tempo of Stayin\u2019 Alive by Bee Gees'],
+  tempo: ['Tap the rhythm of \u201cAnother one bites the dust\u201d (Queen)'],
 };
 const opts = (list, sel) => list.map(([v, l]) => `<option value="${v}" ${v === sel ? 'selected' : ''}>${esc(l)}</option>`).join('');
 
@@ -88,18 +88,10 @@ function block(uid, i) {
     </div>
 
     <div data-part="tempo" class="hidden" style="display:grid;gap:14px">
-      <div class="row2">
-        <label class="field"><span>The song's tempo (BPM)</span><input class="input num" data-f="bpm" inputmode="decimal" placeholder="e.g. 103"></label>
-        <div class="field"><span>&nbsp;</span><button type="button" class="btn ghost" data-f="measure">Tap to measure</button></div>
-      </div>
-      <div data-f="measurebox" class="hidden" style="display:grid;gap:8px;justify-items:center">
-        <div class="hint">Play the song and tap the circle along with the beat, 8 times or more.</div>
-        <button type="button" class="tmp-circle go" data-f="measurecircle" style="width:130px;height:130px"><span class="tmp-label" style="font-size:22px">Tap</span><span class="tmp-count" data-f="measurecount">0</span></button>
-      </div>
-      <label class="field"><span>Where to start (optional hint shown to players)</span><input class="input" data-f="hint" maxlength="80" placeholder="e.g. Think of the chorus"></label>
+      <div class="field"><span>Record the real rhythm</span><div data-f="recorder"></div></div>
+      <label class="field"><span>Which part to tap (shown to players)</span><input class="input" data-f="hint" maxlength="80" placeholder="e.g. One tap per syllable of the chorus line"></label>
       <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="tempotol">${opts(TEMPO_TOL, 0.5)}</select></label>
-      <div class="scoreprev" data-f="tempoprev"></div>
-      <div class="hint">Look up the tempo on songbpm.com, or use Tap to measure while the song plays. Tapping at half or double speed still earns 80 % of the points.</div>
+      <div class="hint">Players see how many taps the rhythm has and your hint, then tap it from memory. They score on speed (total length) and rhythm (the gaps between taps). Keep it short and famous: a chorus line, a riff, an intro.</div>
     </div>
 
     <div data-part="order" class="hidden" style="display:grid;gap:12px">
@@ -165,25 +157,11 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     }
   }
 
-  // ---- tempo ----
-  function updateTempoPreview(i) {
-    const t = parseNumber(f(i, 'bpm').value);
-    const tol = +f(i, 'tempotol').value;
-    f(i, 'tempoprev').innerHTML = t > 0 ? [[t * 1.05, '5% off'], [t * 1.1, '10% off'], [t / 2, 'Half speed']]
-      .map(([g, l]) => `<div>${l}<b>${fmtPts(tempoPoints(t, g, tol))}</b></div>`).join('') : '';
-  }
-  function setupMeasure(i) {
-    let times = [];
-    f(i, 'measure').onclick = () => { f(i, 'measurebox').classList.toggle('hidden'); times = []; f(i, 'measurecount').textContent = '0'; };
-    f(i, 'measurecircle').addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      if (times.length && e.timeStamp - times[times.length - 1] > 2500) times = [];
-      times.push(e.timeStamp);
-      if (times.length < 4) { f(i, 'measurecount').textContent = String(times.length); return; }
-      const r = tempoFromTaps(times.slice(-16));
-      f(i, 'measurecount').textContent = `${Math.round(r.bpm)} BPM`;
-      if (times.length >= 8) { f(i, 'bpm').value = Math.round(r.bpm); updateTempoPreview(i); onChange(); }
-    });
+  // ---- rhythm ----
+  function ensureRecorder(i, initial = null) {
+    if (state[i].recorder && !initial) return;
+    state[i].rhythm = initial;
+    state[i].recorder = createRecorder(f(i, 'recorder'), { initial, onChange: (r) => { state[i].rhythm = r; onChange(); } });
   }
 
   // ---- colour ----
@@ -228,7 +206,7 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     if (kind === 'order' && !itemInputs(i).length) setItems(i, ['', '', '', '', '']);
     if (kind === 'time') updateTimePreview(i);
     if (kind === 'percent') updatePctPreview(i);
-    if (kind === 'tempo') updateTempoPreview(i);
+    if (kind === 'tempo') ensureRecorder(i);
     onChange();
   }
 
@@ -274,10 +252,7 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     f(i, 'scoring').addEventListener('change', () => { updateNumberPreview(i); onChange(); });
     f(i, 'pcttol').addEventListener('change', () => updatePctPreview(i));
     f(i, 'secs').addEventListener('input', () => { updateTimePreview(i); onChange(); });
-    f(i, 'bpm').addEventListener('input', () => { updateTempoPreview(i); onChange(); });
-    f(i, 'tempotol').addEventListener('change', () => updateTempoPreview(i));
     f(i, 'hint').addEventListener('input', onChange);
-    setupMeasure(i);
     f(i, 'timetol').addEventListener('change', () => updateTimePreview(i));
     f(i, 'hex').addEventListener('input', () => {
       let v = f(i, 'hex').value.trim();
@@ -304,6 +279,7 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
         unit: k === 'number' ? f(i, 'unit').value.trim() : '',
         target: k === 'time' ? parseNumber(f(i, 'secs').value) : null,
         hint: k === 'tempo' ? f(i, 'hint').value.trim() : '',
+        taps: k === 'tempo' ? state[i].rhythm?.length : null,
         items: items ? items.slice().reverse() : null,   // shown shuffled to players; reversed is a fine stand-in
         image_url: state[i].imageOk ? f(i, 'imgurl').value.trim() : '',
       };
@@ -339,9 +315,8 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
         return { kind: 'time', prompt, answer: t, tolerance: Math.round(t * +f(i, 'timetol').value * 1000) / 1000, ...extras };
       }
       if (k === 'tempo') {
-        const bpm = parseNumber(f(i, 'bpm').value);
-        if (bpm === null || bpm < 40 || bpm > 240) throw new Error(`Question ${n}: enter the song's tempo, 40 to 240 BPM`);
-        return { kind: 'tempo', prompt, answer: bpm, hint: f(i, 'hint').value.trim(), tolerance: +f(i, 'tempotol').value, ...extras };
+        if (!state[i].rhythm) throw new Error(`Question ${n}: record the rhythm by tapping along to the song`);
+        return { kind: 'tempo', prompt, rhythm: state[i].rhythm, hint: f(i, 'hint').value.trim(), tolerance: +f(i, 'tempotol').value, ...extras };
       }
       if (k === 'color') {
         let hex = f(i, 'hex').value.trim().toLowerCase();
@@ -397,10 +372,9 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
         state[i].autoPrompt = '';
         updateTimePreview(i);
       } else if (q.kind === 'tempo') {
-        f(i, 'bpm').value = q.answer ?? '';
+        ensureRecorder(i, q.items);
         f(i, 'hint').value = q.label || '';
         f(i, 'tempotol').value = String(nearest(TEMPO_TOL, q.tolerance));
-        updateTempoPreview(i);
       } else if (q.kind === 'color') {
         f(i, 'hex').value = q.color || '';
         setHex(i, q.color || '');
@@ -435,7 +409,7 @@ export function renderPreview(el, qs, author, current = 0) {
     percent: '<div class="fake-pct"><b>50 %</b><span></span></div>',
     time: `<div class="fake-timer">Start</div><div class="muted" style="font-size:11px;text-align:center">Stop at ${q.target ? fmt(q.target) : '?'} s</div>`,
     color: '<div class="fake-color"></div>',
-    tempo: `<div class="fake-timer" style="background:var(--accent);color:var(--accent-ink)">Tap</div><div class="muted" style="font-size:11px;text-align:center">Practice first, then tap 8 times${q.hint ? ` · ${esc(q.hint)}` : ''}</div>`,
+    tempo: `<div class="fake-timer" style="background:var(--accent);color:var(--accent-ink)">Tap</div><div class="muted" style="font-size:11px;text-align:center">Practice first, then tap ${q.taps || '?'} times${q.hint ? ` · ${esc(q.hint)}` : ''}</div>`,
     order: `<div class="fake-sort">${(q.items?.length ? q.items : ['Item', 'Item', 'Item']).map((it, k) => `<span><b>${k + 1}</b> ${esc(it)}</span>`).join('')}</div>`,
     number: `<div class="fake-input"><span>Your guess</span><span>${esc(q.unit || '')}</span></div>`,
   };

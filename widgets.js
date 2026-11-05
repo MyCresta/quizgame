@@ -1,5 +1,5 @@
 // Interactive answer widgets: colour picker, drag-to-sort list, percent slider, stop-the-clock timer.
-import { esc } from './common.js';
+import { esc, rhythmTimeline, rhythmVerdict, rhythmPoints } from './common.js';
 
 // ---------- colour helpers ----------
 export function hexToRgb(hex) {
@@ -172,95 +172,87 @@ export function createTimer(el, { target, done = false, onDone = () => {} } = {}
   return {};
 }
 
-// ---------- Tap the tempo ----------
-// 1) Practice: tap along with a pulsing example beat (not the song's tempo).
-// 2) Your turn: hum the song in your head; the first tap starts it; 8 taps.
-// 3) Uneven taps get a gentle "try again"; redo is always allowed. onDone(bpm) fires when a tempo is kept.
-const PRACTICE_BPM = 60;
-const TAPS = 8;
+// ---------- Tap the rhythm ----------
+// Practice: watch "Shave and a haircut… two bits" (public domain), then tap it back and see a timeline.
+// Your turn: hum the song, tap the rhythm from memory (N taps, first tap starts). onDone(taps in ms from the first tap).
 
-export function tempoFromTaps(times) {
-  const iv = times.slice(1).map((t, i) => t - times[i]);
-  const sorted = iv.slice().sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
-  const sd = Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / iv.length);
-  return { bpm: Math.round((60000 / median) * 10) / 10, unevenness: sd / mean };
+export const PRACTICE_RHYTHM = [0, 500, 750, 1000, 1500, 2500, 3000];
+const MAX_PAUSE = 3000;
+
+function tapCircle(cls, label, count) {
+  return `<button type="button" class="tmp-circle ${cls}" aria-label="Tap"><span class="tmp-dot"></span><span class="tmp-label">${label}</span>${count != null ? `<span class="tmp-count">${count}</span>` : ''}</button>`;
+}
+const flash = (circle) => { circle.classList.remove('pulse'); void circle.offsetWidth; circle.classList.add('pulse'); };
+const ripple = (circle) => { circle.classList.remove('hit'); void circle.offsetWidth; circle.classList.add('hit'); navigator.vibrate?.(12); };
+
+// Plays a rhythm on a circle (flash + short vibration per note). Returns a cancel function.
+function playRhythm(circle, ref, onEnd) {
+  const timers = ref.map((ms) => setTimeout(() => { flash(circle); navigator.vibrate?.(20); }, 400 + ms));
+  timers.push(setTimeout(onEnd, 400 + ref[ref.length - 1] + 500));
+  return () => timers.forEach(clearTimeout);
 }
 
-export function createTempo(el, { hint = '', done = false, onDone = () => {} } = {}) {
+export function createRhythm(el, { count, hint = '', done = false, onDone = () => {} } = {}) {
   let stage = done ? 'done' : 'practice';
-  let taps = [];
-  let pulseTimer = null;
-  let pending = null;   // a measured but uneven result waiting for "use it anyway"
+  let cancelDemo = () => {};
 
-  const stopPulse = () => { clearInterval(pulseTimer); pulseTimer = null; };
-  const ripple = (circle) => { circle.classList.remove('hit'); void circle.offsetWidth; circle.classList.add('hit'); navigator.vibrate?.(12); };
+  function collectTaps(circle, n, counter, fb, finish) {
+    let taps = [];
+    circle.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); ripple(circle);
+      if (taps.length && e.timeStamp - taps[taps.length - 1] > MAX_PAUSE) { taps = []; fb.textContent = 'That pause was long, so we started over.'; }
+      taps.push(e.timeStamp);
+      counter.textContent = `${taps.length} / ${n}`;
+      if (taps.length === 1) fb.textContent = 'Keep going…';
+      if (taps.length === n) { const rel = taps.map((t) => Math.round(t - taps[0])); taps = []; finish(rel); }
+    });
+  }
 
   function render() {
-    stopPulse();
+    cancelDemo();
     if (stage === 'practice') {
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">1 · Practice</div>
-        <p class="tmp-text">Tap the circle along with its pulse to get the feel: one tap per beat, evenly spaced. This is just an example beat, <b>not</b> the song's tempo.</p>
-        <button type="button" class="tmp-circle demo" aria-label="Tap"><span class="tmp-dot"></span><span class="tmp-label">Tap</span></button>
-        <div class="tmp-feedback" aria-live="polite">Tap along with the pulse</div>
-        <button type="button" class="btn block" data-a="ready">I'm ready for the real one →</button>
+        <p class="tmp-text">Watch the circle knock a rhythm (<i>"shave and a haircut… two bits"</i>), then tap it back, <b>one tap per knock</b>. This is just practice, not today's song.</p>
+        <div class="tmp-slot"></div>
+        <div class="tmp-feedback" aria-live="polite">&nbsp;</div>
+        <div class="tmp-row"><button type="button" class="btn ghost" data-a="show">▶ Show again</button><button type="button" class="btn" data-a="ready">Ready →</button></div>
       </div>`;
-      const circle = el.querySelector('.tmp-circle');
-      const beat = () => { circle.classList.remove('pulse'); void circle.offsetWidth; circle.classList.add('pulse'); };
-      beat(); pulseTimer = setInterval(beat, 60000 / PRACTICE_BPM);
-      taps = [];
-      circle.addEventListener('pointerdown', (e) => {
-        e.preventDefault(); ripple(circle);
-        if (taps.length && e.timeStamp - taps[taps.length - 1] > 2500) taps = [];
-        taps.push(e.timeStamp);
-        const fb = el.querySelector('.tmp-feedback');
-        if (taps.length < 6) { fb.textContent = `Keep going… (${taps.length}/6)`; return; }
-        const r = tempoFromTaps(taps.slice(-6));
-        const off = Math.abs(r.bpm - PRACTICE_BPM) / PRACTICE_BPM;
-        fb.innerHTML = r.unevenness > 0.18 ? 'A bit uneven. Try to keep every tap evenly spaced.'
-          : off < 0.08 ? `Nice and steady, right on the beat! 🎯 <span class="muted">(you: ${Math.round(r.bpm)}, example: ${PRACTICE_BPM})</span>`
-          : `Steady! You were ${r.bpm > PRACTICE_BPM ? 'a little fast' : 'a little slow'} <span class="muted">(you: ${Math.round(r.bpm)}, example: ${PRACTICE_BPM})</span>`;
-        taps = [];
-      });
+      const slot = el.querySelector('.tmp-slot'), fb = el.querySelector('.tmp-feedback');
+      const n = PRACTICE_RHYTHM.length;
+      const show = () => {
+        cancelDemo();
+        slot.innerHTML = tapCircle('demo', 'Watch', null);
+        fb.textContent = 'Watch the rhythm…';
+        cancelDemo = playRhythm(slot.querySelector('.tmp-circle'), PRACTICE_RHYTHM, () => {
+          slot.innerHTML = tapCircle('go', 'Tap', `0 / ${n}`);
+          const c = slot.querySelector('.tmp-circle');
+          fb.textContent = 'Now tap it back. Your first tap starts it.';
+          collectTaps(c, n, c.querySelector('.tmp-count'), fb, (taps) => {
+            const pts = rhythmPoints(PRACTICE_RHYTHM, taps, 0.5);
+            fb.innerHTML = `${rhythmTimeline(PRACTICE_RHYTHM, taps)}<div class="tmp-verdict">${rhythmVerdict(PRACTICE_RHYTHM, taps)} <span class="muted">(${pts.toLocaleString('sv-SE')} pts)</span></div>`;
+            c.querySelector('.tmp-count').textContent = 'Tap again to retry';
+          });
+        });
+      };
+      el.querySelector('[data-a="show"]').onclick = show;
       el.querySelector('[data-a="ready"]').onclick = () => { stage = 'turn'; render(); };
+      show();
       return;
     }
     if (stage === 'turn') {
-      taps = [];
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">2 · Your turn</div>
-        <p class="tmp-text">Hum the song in your head${hint ? ` <span class="tmp-hint">(${esc(hint)})</span>` : ''}. Tap the <b>steady beat</b>, the one you'd clap or nod along to, not the melody or the words. <b>Your first tap starts it</b>, no rush.</p>
-        <button type="button" class="tmp-circle go" aria-label="Tap"><span class="tmp-label">Tap</span><span class="tmp-count">0 / ${TAPS}</span></button>
+        <p class="tmp-text">Hum the song in your head${hint ? ` <span class="tmp-hint">(${esc(hint)})</span>` : ''} and tap its rhythm: <b>${count} taps</b>, one per note. <b>Your first tap starts it</b>, no rush.</p>
+        ${tapCircle('go', 'Tap', `0 / ${count}`)}
         <div class="tmp-feedback" aria-live="polite">&nbsp;</div>
         <button type="button" class="btn ghost block" data-a="practice">← Practice again</button>
       </div>`;
-      const circle = el.querySelector('.tmp-circle'), count = el.querySelector('.tmp-count'), fb = el.querySelector('.tmp-feedback');
-      circle.addEventListener('pointerdown', (e) => {
-        e.preventDefault(); ripple(circle);
-        if (taps.length && e.timeStamp - taps[taps.length - 1] > 2500) { taps = []; fb.textContent = 'That pause was long, so we started over. Tap along again.'; }
-        taps.push(e.timeStamp);
-        count.textContent = `${taps.length} / ${TAPS}`;
-        if (taps.length === 1) fb.textContent = 'Keep tapping along with the beat…';
-        if (taps.length < TAPS) return;
-        const r = tempoFromTaps(taps);
-        const rel = taps.map((t) => t - taps[0]);
-        if (r.unevenness > 0.18) { pending = { bpm: r.bpm, taps: rel }; stage = 'uneven'; render(); return; }
-        onDone(r.bpm, rel); stage = 'done'; navigator.vibrate?.(30); render();
+      const circle = el.querySelector('.tmp-circle');
+      collectTaps(circle, count, el.querySelector('.tmp-count'), el.querySelector('.tmp-feedback'), (taps) => {
+        onDone(taps); stage = 'done'; navigator.vibrate?.(30); render();
       });
       el.querySelector('[data-a="practice"]').onclick = () => { stage = 'practice'; render(); };
-      return;
-    }
-    if (stage === 'uneven') {
-      el.innerHTML = `<div class="tmp">
-        <div class="tmp-step">Hmm</div>
-        <p class="tmp-text">That was a bit uneven, so it might not match what you meant. Want to try again?</p>
-        <button type="button" class="btn block" data-a="again">Try again</button>
-        <button type="button" class="btn ghost block" data-a="keep">Use it anyway</button>
-      </div>`;
-      el.querySelector('[data-a="again"]').onclick = () => { stage = 'turn'; render(); };
-      el.querySelector('[data-a="keep"]').onclick = () => { onDone(pending.bpm, pending.taps); stage = 'done'; render(); };
       return;
     }
     el.innerHTML = `<div class="tmp">
@@ -270,13 +262,37 @@ export function createTempo(el, { hint = '', done = false, onDone = () => {} } =
     </div>`;
     el.querySelector('[data-a="redo"]').onclick = () => { stage = 'turn'; render(); };
   }
-
-  // Stop the practice pulse if the widget is removed from the page
-  const obs = new MutationObserver(() => {
-    if (!document.body.contains(el)) { stopPulse(); obs.disconnect(); }
-    else if (!el.querySelector('.tmp-circle.demo')) stopPulse();
-  });
-  obs.observe(document.body, { childList: true, subtree: true });
   render();
   return {};
+}
+
+// For question authors: record the real rhythm by tapping along while the song plays.
+// Stops after a 2-second pause. onChange(taps | null).
+export function createRecorder(el, { initial = null, onChange = () => {} } = {}) {
+  let rec = initial;
+  function render() {
+    el.innerHTML = rec ? `<div class="tmp">
+        ${rhythmTimeline(rec, null)}
+        <div class="tmp-verdict"><b>${rec.length} taps</b> · ${(rec[rec.length - 1] / 1000).toFixed(1)} s</div>
+        <button type="button" class="btn ghost" data-a="again">Record again</button>
+      </div>` : `<div class="tmp">
+        <p class="tmp-text">Play the song, and tap along with the part players should tap, <b>one tap per note or syllable</b>. Recording stops after a 2-second pause.</p>
+        ${tapCircle('go', 'Tap', '0 taps')}
+      </div>`;
+    if (rec) { el.querySelector('[data-a="again"]').onclick = () => { rec = null; onChange(null); render(); }; return; }
+    const circle = el.querySelector('.tmp-circle'), cnt = el.querySelector('.tmp-count');
+    let taps = [], timer = null;
+    circle.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); ripple(circle);
+      taps.push(e.timeStamp);
+      cnt.textContent = `${taps.length} tap${taps.length === 1 ? '' : 's'}`;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (taps.length < 3) { taps = []; cnt.textContent = 'Need at least 3 taps'; return; }
+        rec = taps.slice(0, 20).map((t) => Math.round(t - taps[0])); onChange(rec); render();
+      }, 2000);
+    });
+  }
+  render();
+  return { get: () => rec };
 }

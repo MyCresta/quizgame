@@ -138,7 +138,12 @@ $('pass').onkeydown = (e) => { if (e.key === 'Enter') $('loginBtn').click(); };
 $('logout').onclick = (e) => { e.preventDefault(); pass = ''; sessionStorage.removeItem('bp_admin'); show('login'); };
 
 // ---------- Data + rendering ----------
-async function load() { data = await admin('list'); render(); }
+async function spares(action, args = {}) { return rpc('quiz_admin_spares', { p_pass: pass, p_action: action, p_args: args }); }
+async function load() {
+  data = await admin('list');
+  try { data.spares = await spares('list'); } catch { data.spares = []; }
+  render();
+}
 
 function answerText(q) {
   switch (q.kind) {
@@ -211,6 +216,11 @@ function render() {
   } else if (tab === 'backups') {
     html = `<p class="hint">Backup sets are picked at random on days when the queue is empty. Each is used once.</p>
       <div class="actions"><button data-a="new-backup">＋ New backup set</button></div>` +
+      (data.spares?.length ? `<div class="set" id="spareCard"><div class="head"><b>Spare questions</b><span class="meta">${data.spares.length} waiting</span></div>
+        <p class="hint">Questions you replaced with something else. Tick up to three and make them into a backup set (you can fill in the rest in the editor).</p>
+        <ol style="list-style:none;padding:0">${data.spares.map((sp) => `<li><label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="spare-pick" value="${sp.id}" style="margin-top:4px">
+          <span>${esc(sp.question.prompt)}<br><span class="ans">${answerText(sp.question)}</span>${sp.note ? `<span class="sub"> · ${esc(sp.note)}</span>` : ''}</span></label></li>`).join('')}</ol>
+        <div class="actions"><button data-a="spare-set">Make a backup set from the ticked ones</button></div></div>` : '') +
       (data.backups.length ? data.backups.map((s) => setCard(s, {
         title: esc(s.author), meta: 'backup',
         actions: `<button data-a="edit">Edit</button><button data-a="to-queue">Move to queue</button><button data-a="delete" class="danger">Delete</button>`,
@@ -237,6 +247,15 @@ function bindActions() {
     try {
       if (a === 'new') return openEditor(null, false);
       if (a === 'new-backup') return openEditor(null, true);
+      if (a === 'spare-set') {
+        const ids = [...document.querySelectorAll('.spare-pick:checked')].map((x) => +x.value);
+        if (!ids.length || ids.length > 3) { toast('Tick one to three spare questions'); return; }
+        const qs = ids.map((id) => data.spares.find((sp) => sp.id === id).question);
+        openEditor(null, true, qs);
+        editing.spareIds = ids;
+        if (qs.length < 3) toast(`Add ${3 - qs.length} more question${qs.length === 2 ? '' : 's'} to complete the set`, true);
+        return;
+      }
       if (a === 'edit') return openEditor(findSet(id));
       if (['up', 'down', 'top'].includes(a)) await admin('move', { id, dir: a });
       if (a === 'to-backup') await admin('set_backup', { id, backup: true });
@@ -262,7 +281,9 @@ const TRY_KEY = 'bp_try_rhythms';
 const beats = (b, ms) => b.map((x) => Math.round(x * ms));
 const BUILT_INS = [
   { song: 'Shave and a Haircut… Two Bits', hint: 'The classic door knock', rhythm: PRACTICE_RHYTHM, builtIn: true, practice: true },
-  { title: 'Tetris theme', song: 'the Tetris theme', hint: 'The very start of the Tetris theme', rhythm: beats([0, 1, 1.5, 2, 3, 3.5, 4], 400), builtIn: true },
+  { title: 'Tetris theme (Game Boy "Type A")', song: 'the Tetris theme (the classic Game Boy "Type A" music)',
+    hint: 'The whole first line: du, du-du-du, du-du-du, du-du-du, du-du-du, du du du du du du',
+    rhythm: beats([0, 1, 1.5, 2, 3, 3.5, 4, 5, 5.5, 6, 7, 7.5, 8, 9.5, 10, 11, 12, 13, 14], 330), builtIn: true },
   { title: 'Nokia ringtone', song: 'the Nokia ringtone', hint: 'The classic Nokia ringtone, once through', rhythm: beats([0, 0.5, 1, 2, 3, 3.5, 4, 5, 6, 6.5, 7, 8, 9], 360), builtIn: true },
   { song: 'Jingle Bells', words: syllables('Jin-gle bells jin-gle bells jin-gle all the way'), hint: '', rhythm: beats([0, 1, 2, 4, 5, 6, 8, 9, 10, 11.5, 12], 450), builtIn: true },
 ];
@@ -319,7 +340,11 @@ function openTry(t) {
       words: t.words, tolerance: 0.5, fact: '', source_url: '', image_url: '',
     });
     openEditor({ ...set, questions });
-    toast('Song added to the set. Check it, then press Save.', true);
+    const old = set.questions[pos];
+    if (old.kind !== 'tempo' || old.prompt !== questions[pos].prompt) {
+      editing.replaced = { question: old, note: `replaced by ${t.title || t.song} in ${set.author}'s set` };
+    }
+    toast('Song added to the set. Check it, then press Save. The question it replaces is kept as a spare.', true);
   });
   createRhythm($('tryWidget'), {
     count: t.rhythm.length, hint: t.hint, words: t.words,
@@ -377,7 +402,7 @@ async function loadScreenCard() {
 
 // ---------- Editing ----------
 let editor = null;
-function openEditor(set, backup) {
+function openEditor(set, backup, preload = null) {
   editing = { id: set?.id ?? null };
   show('edit');
   $('editTitle').textContent = set ? 'Edit set' : backup ? 'New backup set' : 'New set';
@@ -389,6 +414,7 @@ function openEditor(set, backup) {
   $('editBackup').disabled = !!set?.play_date;
   editor = createSetEditor($('editor'), { toast });
   if (set) editor.load(set.questions);
+  else if (preload) editor.load(preload);
 }
 $('cancelEdit').onclick = () => show('main');
 $('saveEdit').onclick = async () => {
@@ -397,7 +423,13 @@ $('saveEdit').onclick = async () => {
     const author = $('editAuthor').value.trim();
     if (!author) throw new Error('Add an author name');
     await admin('save', { id: editing.id, author, questions, is_backup: $('editBackup').checked });
-    toast('Saved', true);
+    let msg = 'Saved';
+    if (editing.replaced) {
+      try { await spares('add', editing.replaced); msg = 'Saved. The replaced question is in Backups → Spare questions.'; }
+      catch (e) { msg = `Saved, but the replaced question couldn't be kept: ${e.message}`; }
+    }
+    if (editing.spareIds) { try { await spares('use', { ids: editing.spareIds }); } catch (e) { console.error(e); } }
+    toast(msg, true);
     await load(); show('main');
   } catch (e) { toast(e.message); }
 };

@@ -173,21 +173,21 @@ export function guessHtml(q, g) {
 }
 
 // ---------- Tap the rhythm ----------
-// Speed doesn't count: the taps are stretched/shifted to best fit the real rhythm (least squares),
-// and only how far each note lands from where it should be is scored. Mirror of quiz_rhythm_points.
+// Speed doesn't count: you and the real rhythm both start on the first tap, and your taps are stretched
+// to the speed that lines all notes up best (least squares). Only how far each note lands off is scored.
+// Mirror of quiz_rhythm_points.
 export function rhythmFit(ref, taps) {
   const n = ref.length;
   if (!taps || taps.length !== n || n < 2) return null;
-  const mr = ref.reduce((x, y) => x + y, 0) / n, mt = taps.reduce((x, y) => x + y, 0) / n;
-  let sxy = 0, sxx = 0;
-  for (let i = 0; i < n; i++) { sxy += (ref[i] - mr) * (taps[i] - mt); sxx += (ref[i] - mr) ** 2; }
+  let srt = 0, srr = 0;
+  for (let i = 1; i < n; i++) { const r = ref[i] - ref[0], t = taps[i] - taps[0]; srt += r * t; srr += r * r; }
   const dr = ref[n - 1] - ref[0];
-  if (!(sxx > 0) || !(dr > 0)) return null;
-  const b = sxy / sxx, a = mt - b * mr;
+  if (!(srr > 0) || !(dr > 0)) return null;
+  const b = srt / srr;
   if (!(b > 0)) return null;
   let err = 0;
-  for (let i = 0; i < n; i++) err += Math.abs(taps[i] - (a + b * ref[i])) / b;
-  return { a, b, err: err / n / (dr / (n - 1)) };   // err: average miss as a share of an average gap between notes
+  for (let i = 1; i < n; i++) err += Math.abs((taps[i] - taps[0]) / b - (ref[i] - ref[0]));
+  return { a: taps[0] - b * ref[0], b, err: err / (n - 1) / (dr / (n - 1)) };   // err: average miss as a share of an average gap
 }
 
 export function rhythmPoints(ref, taps, tol = 0.5) {

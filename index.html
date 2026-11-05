@@ -237,7 +237,7 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml, rhythmTimeline } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -445,12 +445,14 @@ function renderResults(res) {
     const who = b ? `Closest: <b>${esc(b.player)}</b>` : '';
     const g = b ? guessHtml(q, { guess: b.guess, lat: b.lat, lng: b.lng, json: b.json }) : '';
     const best = !b ? '' : q.kind === 'order' ? `${who} · ${fmtPts(b.points)}`
+      : q.kind === 'tempo' ? `${who} · ${fmtPts(b.points)} <span class="muted" style="font-size:.85em">(orange = real, green = ${esc(b.player)})</span>`
       : q.kind === 'color' ? `${who} ${g} · ${fmtPts(b.points)}`
       : q.kind === 'number' ? `${who} ${g} · ${fmtPts(b.points)}`
       : `${who}, ${g} · ${fmtPts(b.points)}`;
     return `<div class="r kind-${q.kind}">
       <div class="rq">${q.position}. ${esc(q.prompt)}</div>
-      <div class="ans num">${q.kind === 'number' ? `${fmt(q.answer_num)}<small>${esc(q.unit || '')}</small>` : answerHtml(q)}</div>
+      <div class="ans num">${q.kind === 'number' ? `${fmt(q.answer_num)}<small>${esc(q.unit || '')}</small>`
+        : q.kind === 'tempo' && q.answer_items ? rhythmTimeline(q.answer_items, Array.isArray(b?.json) ? b.json : null, { compact: true }) : answerHtml(q)}</div>
       <div class="best">${best}</div>
       <div class="fact">${factLine(q)}</div>
     </div>`;

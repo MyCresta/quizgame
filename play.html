@@ -163,6 +163,7 @@ function viewOwn() {
 async function viewDone(result) {
   const head = `<div class="big-emoji">🎯</div><h1>Locked in!</h1>`;
   $('view').innerHTML = `<div class="card center">${head}<p class="muted">Fetching your points…</p></div>`;
+  if (!result) { try { const saved = JSON.parse(store.get(doneKey()) || 'null'); if (saved && saved.points) result = saved; } catch { /* old '1' marker */ } }
   try { if (!result) result = await rpc('quiz_my_today', { p_player: name }); } catch (e) { console.error(e); }
   if (!result || !result.points) {
     $('view').innerHTML = `<div class="card center">${head}<p class="muted">Your answers for ${fmtDate(today.date)} are saved. The correct answers appear on the office screen tomorrow morning.</p></div>`;
@@ -173,7 +174,9 @@ async function viewDone(result) {
     const q = qs.find((x) => x.id === p.question_id);
     const pct = p.points / 10000;
     const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';
-    return `<div class="line"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>`;
+    const tl = Array.isArray(p.ref) && Array.isArray(p.taps)
+      ? `<div style="margin-top:6px">${rhythmTimeline(p.ref, p.taps)}<div class="muted" style="font-size:13px">${rhythmVerdict(p.ref, p.taps)} · orange = the real rhythm, green = your taps</div></div>` : '';
+    return `<div class="line" style="${tl ? 'display:grid' : ''}"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${tl}</div>`;
   }).join('');
   $('view').innerHTML = `<div class="card">
     <div class="center" style="display:grid;gap:8px">${head}</div>
@@ -314,7 +317,7 @@ function viewReview() {
         return { question_id: q.id, value: a.value };
       });
       const result = await rpc('quiz_submit_code', { p_player: name, p_answers: payload, p_code: joinCode });
-      store.set(doneKey(), '1'); store.del(draftKey());
+      store.set(doneKey(), JSON.stringify(result)); store.del(draftKey());
       viewDone(result);
     } catch (e) {
       toast(e.message);

@@ -185,6 +185,9 @@
     .r.map .ans { font-size: 1.6rem; }
   }
 
+  .locked { height: 100%; display: grid; place-content: center; justify-items: center; gap: 2rem; text-align: center; }
+  .locked .logo { font-size: 6rem; }
+  .locked p { font-size: 2rem; color: var(--muted); line-height: 1.4; margin: 0; }
   .offline { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: .4rem 1rem; border-radius: 999px; font-size: 1rem; font-weight: 700; display: none; }
 </style>
 </head>
@@ -243,10 +246,23 @@ function qrSvg(text) {
   const q = qrcode(0, 'M'); q.addData(text); q.make();
   return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
 }
-const playUrl = pageUrl('play.html');
 const addUrl = pageUrl('add.html');
-$('qr').innerHTML = qrSvg(playUrl);
-$('playUrl').textContent = playUrl.replace(/^https?:\/\//, '');
+const screenKey = new URLSearchParams(location.search).get('screen');
+
+// QR link to the phone page, carrying today's join code when the screen has its key.
+function setPlayQr(code) {
+  const playUrl = pageUrl('play.html') + (code ? `?c=${encodeURIComponent(code)}` : '');
+  $('qr').innerHTML = qrSvg(playUrl);
+  $('playUrl').textContent = pageUrl('play.html').replace(/^https?:\/\//, '');
+}
+
+// Shown when the join-code check is on and this browser isn't the office screen.
+function showLocked() {
+  document.querySelector('.screen').innerHTML = `<div class="locked">
+    <div class="logo">${esc(CONFIG.title)}<span class="ball"></span></div>
+    <p>This is the office quiz screen.<br>Scan the QR code on the screen at the office to play.</p>
+  </div>`;
+}
 
 let today = null;
 let lastQuestionsKey = '';
@@ -459,7 +475,6 @@ async function safely(fn) {
   catch (e) { console.error(e); $('offline').style.display = 'block'; }
 }
 
-safely(refreshAll);
 // Add ?size to the URL to show how much space the page gets (for setting up screen templates).
 if (new URLSearchParams(location.search).has('size')) {
   const box = document.createElement('div');
@@ -472,8 +487,16 @@ if (new URLSearchParams(location.search).has('size')) {
   upd(); addEventListener('resize', upd); document.body.appendChild(box);
 }
 
-setInterval(() => safely(refreshToday), 20_000);       // new answers + live scoreboard
-setInterval(() => safely(refreshAll), 10 * 60_000);    // board + results
+async function boot() {
+  let scr = { enforced: false, valid: false, code: null };
+  try { scr = await rpc('quiz_screen', { p_key: screenKey }); } catch (e) { console.error(e); }
+  if (scr.enforced && !scr.valid) { showLocked(); return; }
+  setPlayQr(scr.code);
+  safely(refreshAll);
+  setInterval(() => safely(refreshToday), 20_000);       // new answers + live scoreboard
+  setInterval(() => safely(refreshAll), 10 * 60_000);    // board + results
+}
+boot();
 // Full reload a few times a day keeps a long-running TV browser healthy
 setTimeout(() => location.reload(), 6 * 60 * 60_000);
 </script>

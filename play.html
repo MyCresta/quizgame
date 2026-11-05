@@ -86,6 +86,11 @@ let step = 0;               // 0..2 questions, 3 = review
 let answers = {};           // question_id -> {value} | {lat,lng}
 let maps = {};
 let name = store.get('bp_name') || '';
+// Today's join code comes from the QR code on the office screen (?c=…). Keep it, then tidy the address bar.
+const urlCode = new URLSearchParams(location.search).get('c');
+if (urlCode) { store.set('bp_code', urlCode); history.replaceState(null, '', location.pathname); }
+const joinCode = urlCode || store.get('bp_code') || '';
+let codeState = { enforced: false, valid: true };
 
 function toast(msg) {
   const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
@@ -105,6 +110,7 @@ function route() {
   renderWho();
   const qs = today.questions || [];
   if (!qs.length) return viewClosed();
+  if (codeState.enforced && !codeState.valid && !store.get(doneKey())) return viewNeedCode();
   if (!name) return viewName();
   if (today.author && today.author.trim().toLowerCase() === name.toLowerCase()) return viewOwn();
   if (store.get(doneKey()) || (today.answered || []).some((a) => a.player.toLowerCase() === name.toLowerCase())) return viewDone();
@@ -118,6 +124,14 @@ function viewClosed() {
     <h1>${today.weekend ? 'Enjoy the weekend' : 'No questions today'}</h1>
     <p class="muted">${today.weekend ? 'New questions on Monday morning.' : 'The queue is empty. Why not add a set of three for tomorrow?'}</p>
     <a class="btn block" href="add.html" style="text-decoration:none;text-align:center">Add questions</a>
+  </div>`;
+}
+
+function viewNeedCode() {
+  $('view').innerHTML = `<div class="card center">
+    <div class="big-emoji">📷</div>
+    <h1>Scan to play</h1>
+    <p class="muted">Scan the QR code on the office screen to play today\u2019s quiz. Links only work on the day they\u2019re scanned.</p>
   </div>`;
 }
 
@@ -294,7 +308,7 @@ function viewReview() {
         if (q.kind === 'order') return { question_id: q.id, order: a.order };
         return { question_id: q.id, value: a.value };
       });
-      const result = await rpc('quiz_submit', { p_player: name, p_answers: payload });
+      const result = await rpc('quiz_submit_code', { p_player: name, p_answers: payload, p_code: joinCode });
       store.set(doneKey(), '1'); store.del(draftKey());
       viewDone(result);
     } catch (e) {
@@ -328,7 +342,7 @@ async function loadYesterday() {
 
 async function init() {
   try {
-    today = await rpc('quiz_today');
+    [today, codeState] = await Promise.all([rpc('quiz_today'), rpc('quiz_check_code', { p_code: joinCode }).catch(() => ({ enforced: false, valid: true }))]);
     try { answers = JSON.parse(store.get(`bp_draft_${today.date}`) || '{}'); } catch { answers = {}; }
     route();
     loadYesterday();

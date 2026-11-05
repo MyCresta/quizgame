@@ -178,7 +178,8 @@ function render() {
         actions: `<button data-a="edit">Edit</button><button data-a="to-queue">Move to queue</button><button data-a="delete" class="danger">Delete</button>`,
       })).join('') : '<div class="empty">No backup sets left.</div>');
   } else {
-    html = `<div class="card"><h2>Change admin password</h2>
+    html = `<div class="card" id="screenCard"><h2>Office screen</h2><p class="hint">Loading…</p></div>
+      <div class="card"><h2>Change admin password</h2>
       <label class="field"><span>New password (at least 8 characters)</span><input class="input" id="newPass" type="password" autocomplete="new-password"></label>
       <button class="btn" id="savePass">Save password</button></div>`;
   }
@@ -208,11 +209,41 @@ function bindActions() {
       await load();
     } catch (e) { toast(e.message); }
   });
+  if ($('screenCard')) loadScreenCard();
   const sp = $('savePass');
   if (sp) sp.onclick = async () => {
     try { await admin('set_password', { new: $('newPass').value }); pass = $('newPass').value; sessionStorage.setItem('bp_admin', pass); toast('Password changed', true); $('newPass').value = ''; }
     catch (e) { toast(e.message); }
   };
+}
+
+// ---------- Office screen link + join-code check ----------
+async function loadScreenCard() {
+  const card = $('screenCard');
+  try {
+    const r = await admin('screen');
+    const url = new URL(`index.html?screen=${r.screen_key}`, location.href).href;
+    card.innerHTML = `<h2>Office screen</h2>
+      <p class="hint">Use this address in the screen's web page template in Dise. It contains a secret key, so don't share it. The QR code on that screen carries a code that changes every day.</p>
+      <div class="search"><input class="input num" id="screenUrl" readonly value="${esc(url)}"><button type="button" class="btn ghost" id="copyUrl">Copy</button></div>
+      <div class="set" style="background:var(--panel-2)">
+        <div class="head"><b>Join-code check: ${r.enforce ? '<span style="color:var(--mint)">ON</span>' : '<span style="color:var(--muted)">OFF</span>'}</b></div>
+        <p class="hint">${r.enforce
+          ? 'Only people who scanned today\u2019s QR code on the office screen can answer. Opening the quiz address without the key shows no QR code.'
+          : 'Anyone with the quiz address can answer. Turn this on once the office screen uses the address above and shows a QR code.'}</p>
+        <div class="actions"><button type="button" id="toggleEnforce">${r.enforce ? 'Turn off' : 'Turn on'}</button>
+          <button type="button" id="newKey" class="danger">Make a new screen key</button></div>
+      </div>`;
+    $('copyUrl').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Copied', true); } catch { $('screenUrl').select(); } };
+    $('toggleEnforce').onclick = async () => {
+      if (!r.enforce && !confirm('Turn on the join-code check? Make sure the office screen already uses the new address and shows a QR code.')) return;
+      try { await admin('set_enforce', { on: !r.enforce }); toast(r.enforce ? 'Check turned off' : 'Check turned on', true); loadScreenCard(); } catch (e) { toast(e.message); }
+    };
+    $('newKey').onclick = async () => {
+      if (!confirm('Make a new key? The old screen address stops working, so you must update it in Dise straight away.')) return;
+      try { await admin('new_screen_key'); toast('New key made. Update the address in Dise.', true); loadScreenCard(); } catch (e) { toast(e.message); }
+    };
+  } catch (e) { card.innerHTML = `<h2>Office screen</h2><p class="error">${esc(e.message)}</p>`; }
 }
 
 // ---------- Editing ----------

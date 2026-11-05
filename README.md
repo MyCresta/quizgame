@@ -36,6 +36,11 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
 Hosted on GitHub Pages from `main`. Map tiles: Esri (no labels) with automatic fallback to OpenStreetMap. Supabase settings are in `config.js` (the publishable key is meant to be public;
 tables are locked down and only the `quiz_*` functions are callable).
 
+**Office screen key and daily join code:** the screen's address has a secret key (`index.html?screen=…`, copy it
+from Admin → Settings). With that key, the screen's QR code carries a code that changes every day. When the join-code
+check is turned on (Admin → Settings), only people who scanned today's QR code can answer, and opening the quiz
+address without the key shows no QR code, questions or names.
+
 Admin page: `admin.html`. Change the password under Settings after the first login.
 
 **One-time setup:** run `supabase/one_time_cleanup.sql` once in Supabase → SQL Editor. It enables the two delete

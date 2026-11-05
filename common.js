@@ -193,7 +193,7 @@ export function rhythmFit(ref, taps) {
 export function rhythmPoints(ref, taps, tol = 0.5) {
   const fit = rhythmFit(ref, taps);
   if (!fit) return 1;
-  const s = Math.max(0, 1 - fit.err / (tol * 0.5)) ** 1.5;
+  const s = Math.exp(-((fit.err / (tol * 0.32)) ** 2));   // gentle near perfect, steep once the rhythm is wrong
   return Math.max(1, Math.min(10000, Math.round(10000 * s)));
 }
 

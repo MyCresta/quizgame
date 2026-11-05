@@ -99,7 +99,7 @@
 <script type="module">
 import { CONFIG } from './config.js';
 import { rpc, fmt, fmtDate, esc, swatchHtml, fmtPts, store, rhythmPoints, rhythmVerdict, rhythmTimeline } from './common.js';
-import { createRhythm, createRecorder, PRACTICE_RHYTHM, syllables } from './widgets.js';
+import { createRhythm, createRecorder, PRACTICE_RHYTHM, PRACTICE_WORDS, syllables } from './widgets.js';
 import { createSetEditor } from './editor.js';
 
 const $ = (id) => document.getElementById(id);
@@ -280,7 +280,7 @@ const TRY_KEY = 'bp_try_rhythms';
 // Written from the sheet music (all public domain tunes). Beats -> ms at a comfortable speed; speed doesn't affect scoring.
 const beats = (b, ms) => b.map((x) => Math.round(x * ms));
 const BUILT_INS = [
-  { song: 'Shave and a Haircut… Two Bits', hint: 'The classic door knock', rhythm: PRACTICE_RHYTHM, builtIn: true, practice: true },
+  { title: 'Helan går (the practice tune)', song: 'Helan går', words: PRACTICE_WORDS, hint: '', rhythm: PRACTICE_RHYTHM, builtIn: true, practice: true },
   { title: 'Tetris theme (Game Boy "Type A")', song: 'the Tetris theme (the classic Game Boy "Type A" music)',
     hint: 'The whole first line: du, du-du-du, du-du-du, du-du-du, du-du-du, du du du du du du',
     rhythm: beats([0, 1, 1.5, 2, 3, 3.5, 4, 5, 5.5, 6, 7, 7.5, 8, 9.5, 10, 11, 12, 13, 14], 330), builtIn: true },

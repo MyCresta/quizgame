@@ -173,10 +173,13 @@ export function createTimer(el, { target, done = false, onDone = () => {} } = {}
 }
 
 // ---------- Tap the rhythm ----------
-// Practice: watch "Shave and a haircut… two bits" (public domain), then tap it back and see a timeline.
+// Practice: watch the start of "Helan går" (traditional), then tap it back and see a timeline.
 // Your turn: hum the song, tap the rhythm from memory (N taps, first tap starts). onDone(taps in ms from the first tap).
 
-export const PRACTICE_RHYTHM = [0, 500, 750, 1000, 1500, 2500, 3000];
+// Practice tune: the opening of "Helan går" (traditional), from the sheet music in 2/4 at ♩ = 124.
+// Onsets in eighth notes: E2 G2 | C2 z>E | D D/ D/ D D | E>C C2
+export const PRACTICE_RHYTHM = [0, 2, 4, 7.5, 8, 9, 9.5, 10, 11, 12, 13.5, 14].map((e) => Math.round(e * 242));
+export const PRACTICE_WORDS = ['He', 'lan', 'går', 'sjung', 'hopp', 'fa', 'de', 'ral', 'lan', 'lal', 'lan', 'lej'];
 const MAX_PAUSE = 12000;   // only a really long break restarts an attempt (some rhythms have long gaps)
 
 function tapCircle(cls, label, count) {
@@ -186,8 +189,8 @@ const flash = (circle) => { circle.classList.remove('pulse'); void circle.offset
 const ripple = (circle) => { circle.classList.remove('hit'); void circle.offsetWidth; circle.classList.add('hit'); navigator.vibrate?.(12); };
 
 // Plays a rhythm on a circle (flash + short vibration per note). Returns a cancel function.
-function playRhythm(circle, ref, onEnd) {
-  const timers = ref.map((ms) => setTimeout(() => { flash(circle); navigator.vibrate?.(20); }, 400 + ms));
+function playRhythm(circle, ref, onEnd, onNote = () => {}) {
+  const timers = ref.map((ms, i) => setTimeout(() => { flash(circle); navigator.vibrate?.(20); onNote(i + 1); }, 400 + ms));
   timers.push(setTimeout(onEnd, 400 + ref[ref.length - 1] + 500));
   return () => timers.forEach(clearTimeout);
 }
@@ -244,13 +247,15 @@ export function createRhythm(el, { count, hint = '', words = null, done = false,
     if (stage === 'practice') {
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">1 · Practice</div>
-        <p class="tmp-text">Watch the circle knock a rhythm (<i>"shave and a haircut… two bits"</i>), then tap it back, <b>one tap per knock</b>. This is just practice, not today's song.</p>
+        <p class="tmp-text">Watch the circle tap the start of <b>Helan går</b>, one flash per syllable. Then sing it in your head and tap it back. This is just practice, not today's song.</p>
+        <div class="tmp-words">${PRACTICE_WORDS.map((w, k) => `<span data-k="${k}">${w}</span>`).join('')}</div>
         <div class="tmp-slot"></div>
         <div class="tmp-feedback" aria-live="polite">&nbsp;</div>
         <button type="button" class="btn ghost block" data-a="again" hidden>↻ Try again</button>
         <div class="tmp-row"><button type="button" class="btn ghost" data-a="show">▶ Show again</button><button type="button" class="btn" data-a="ready">Ready →</button></div>
       </div>`;
       const slot = el.querySelector('.tmp-slot'), fb = el.querySelector('.tmp-feedback'), again = el.querySelector('[data-a="again"]');
+      const lightUp = (k) => el.querySelectorAll('.tmp-words span').forEach((sp) => sp.classList.toggle('on', +sp.dataset.k < k));
       const n = PRACTICE_RHYTHM.length;
       const arm = (msg) => {
         again.hidden = true;
@@ -261,14 +266,16 @@ export function createRhythm(el, { count, hint = '', words = null, done = false,
           const pts = rhythmPoints(PRACTICE_RHYTHM, taps, 0.5);
           fb.innerHTML = `${rhythmTimeline(PRACTICE_RHYTHM, taps)}<div class="tmp-verdict">${rhythmVerdict(PRACTICE_RHYTHM, taps)} <span class="muted">(${pts.toLocaleString('sv-SE')} pts)</span></div>`;
           again.hidden = false; guard([again]);
-        });
+        }, lightUp);
+        lightUp(0);
       };
       const show = () => {
         cancelDemo();
         again.hidden = true;
         slot.innerHTML = tapCircle('demo', 'Watch', null);
         fb.textContent = 'Watch the rhythm…';
-        cancelDemo = playRhythm(slot.querySelector('.tmp-circle'), PRACTICE_RHYTHM, () => arm('Now tap it back. Your first tap starts it.'));
+        lightUp(0);
+        cancelDemo = playRhythm(slot.querySelector('.tmp-circle'), PRACTICE_RHYTHM, () => arm('Now tap it back, one tap per syllable. Your first tap starts it.'), lightUp);
       };
       again.onclick = () => arm('Go again. Your first tap starts it.');
       el.querySelector('[data-a="show"]').onclick = show;

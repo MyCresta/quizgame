@@ -140,7 +140,7 @@ export function pageUrl(file) {
 // ---------- Shared display helpers for every question type ----------
 export const KIND_TAG = {
   number: '', map: '<span class="tag map">📍 Map</span>', percent: '<span class="tag number">% Percent</span>',
-  time: '<span class="tag map">⏱ Timer</span>', color: '<span class="tag number">🎨 Colour</span>', order: '<span class="tag map">↕ Sort</span>',
+  time: '<span class="tag map">⏱ Timer</span>', tempo: '<span class="tag map">🥁 Tempo</span>', color: '<span class="tag number">🎨 Colour</span>', order: '<span class="tag map">↕ Sort</span>',
 };
 export const swatchHtml = (hex, cls = '') => `<span class="sw ${cls}" style="background:${esc(hex)}"></span>`;
 const secs = (n) => `${(Math.round(n * 100) / 100).toFixed(2)} s`;
@@ -151,6 +151,7 @@ export function answerHtml(q) {
     case 'map': return esc(q.answer_label || 'See the map');
     case 'percent': return `${fmt(q.answer_num)} %`;
     case 'time': return `${fmt(q.answer_num)} s`;
+    case 'tempo': return `${Math.round(q.answer_num)} BPM`;
     case 'color': return `${swatchHtml(q.answer_color)} <span class="hex">${esc(q.answer_color)}</span>`;
     case 'order': return (q.answer_items || []).map((it, i) => `<span class="ord"><b>${i + 1}</b> ${esc(it)}</span>`).join(' ');
     default: return `${fmt(q.answer_num)} ${esc(q.unit || '')}`;
@@ -164,8 +165,17 @@ export function guessHtml(q, g) {
     case 'map': return g.lat == null ? '' : `${fmt(Math.round(distanceKm(q.answer_lat, q.answer_lng, g.lat, g.lng)))} km away`;
     case 'percent': return `${fmt(g.guess)} %`;
     case 'time': return g.guess == null ? '' : `stopped at ${secs(g.guess)}`;
+    case 'tempo': return g.guess == null ? '' : `tapped ${Math.round(g.guess)} BPM`;
     case 'color': return g.json ? `${swatchHtml(g.json)}` : '';
     case 'order': return Array.isArray(g.json) ? g.json.map((it) => esc(it)).join(' › ') : '';
     default: return `guessed ${fmt(g.guess)}`;
   }
+}
+
+// Mirror of the database tempo scoring (log2 distance; half or double speed earns 80 %)
+export function tempoPoints(target, bpm, tol = 0.5) {
+  if (!(bpm > 0)) return 1;
+  const sc = (e) => Math.max(0, 1 - e / tol) ** 1.5;
+  const f = Math.max(sc(Math.abs(Math.log2(bpm / target))), 0.8 * sc(Math.abs(Math.log2(2 * bpm / target))), 0.8 * sc(Math.abs(Math.log2(bpm / (2 * target)))));
+  return Math.max(1, Math.min(10000, Math.round(10000 * f)));
 }

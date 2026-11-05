@@ -45,3 +45,26 @@
 .tmr-btn.running { background: var(--danger); color: #fff; box-shadow: 0 8px 30px rgba(255, 93, 115, .3); }
 .tmr-btn.done { background: var(--panel-2); color: var(--muted); box-shadow: none; font-size: 26px; }
 .tmr-hint { font-size: 14px; color: var(--muted); max-width: 300px; line-height: 1.4; }
+
+/* Tap the tempo */
+.tmp { display: grid; gap: 14px; justify-items: center; text-align: center; }
+.tmp > .btn { justify-self: stretch; }
+.tmp-step { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--accent); }
+.tmp-text { font-size: 15px; color: var(--muted); line-height: 1.45; max-width: 340px; }
+.tmp-text b { color: var(--ink); }
+.tmp-hint { color: var(--gold); }
+.tmp-circle { position: relative; width: 190px; height: 190px; border-radius: 50%; border: 0; display: grid; place-content: center; gap: 2px;
+  color: var(--ink); font-weight: 800; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.tmp-circle.demo { background: var(--panel-2); box-shadow: inset 0 0 0 3px var(--line); }
+.tmp-circle.go { background: var(--accent); color: var(--accent-ink); box-shadow: 0 8px 30px rgba(255, 122, 61, .3); }
+.tmp-circle.done { background: var(--mint); color: #062018; width: 120px; height: 120px; cursor: default; }
+.tmp-label { font-size: 30px; }
+.tmp-circle.done .tmp-label { font-size: 48px; }
+.tmp-count { font-size: 15px; opacity: .8; font-variant-numeric: tabular-nums; }
+.tmp-dot { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+.tmp-circle.pulse .tmp-dot { animation: tmp-pulse .45s ease-out; }
+@keyframes tmp-pulse { from { box-shadow: 0 0 0 0 rgba(94, 224, 177, .9); background: rgba(94, 224, 177, .35); } to { box-shadow: 0 0 0 26px rgba(94, 224, 177, 0); background: transparent; } }
+.tmp-circle.hit { animation: tmp-hit .18s ease-out; }
+@keyframes tmp-hit { 50% { transform: scale(.94); } }
+.tmp-feedback { font-size: 14px; min-height: 2.6em; max-width: 320px; line-height: 1.4; }

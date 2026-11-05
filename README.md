@@ -17,6 +17,8 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
   - **Timer**: tap Start, then Stop at exactly N seconds with no clock shown (one try)
   - **Colour**: mix a colour with a picker (scored by how close it looks: CIEDE2000 colour difference plus a penalty for the wrong colour family, so any shade of the right colour scores well)
   - **Sort**: drag 3–6 items into the right order (scored by how many pairs are in the right order)
+  - **Tempo**: tap the beat of a song from memory: a practice round first, then 8 taps, the first tap starts it
+    (scored by how close the BPM is; half or double speed earns 80 %). Try it in Admin → Try it.
 - **Scoring**: every answer scores 1–10 000 points, so 30 000 max per day.
   - Number, ratio scoring (default): an exact answer gets 10 000; being off by 10× (Ballpark), ~3× (Tight) or 100× (Loose) gets 1 point.
   - Number, plain difference: the author sets how far off scores 1 point (good for years).

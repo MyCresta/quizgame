@@ -50,7 +50,8 @@ details.more > div { display: grid; gap: 14px; }
 .pv-phone .fake-btn { background: var(--accent); color: var(--accent-ink); border-radius: 10px; padding: 9px; text-align: center; font-weight: 700; font-size: 14px; }
 
 /* Question type picker: 6 types in a 3×2 grid */
-.seg.seg-kinds { grid-template-columns: repeat(3, 1fr); }
+.seg.seg-kinds { grid-template-columns: repeat(4, 1fr); }
+.seg.seg-kinds button:nth-child(n+5) { grid-column: span 1; }
 .seg.seg-kinds button { padding: 9px 4px; font-size: 14px; }
 .pv-items { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .pv-items span { font-size: 10px; font-weight: 600; background: var(--panel-2); border-radius: 999px; padding: 1px 6px; }

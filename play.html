@@ -75,7 +75,7 @@
 <script type="module">
 import { CONFIG } from './config.js';
 import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml } from './common.js';
-import { createColorPicker, createSortable, createPercent, createTimer } from './widgets.js';
+import { createColorPicker, createSortable, createPercent, createTimer, createTempo } from './widgets.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -197,13 +197,14 @@ function answerText(q) {
     case 'map': return '📍 Pin placed';
     case 'percent': return `${a.value} %`;
     case 'time': return '⏱ Done ✓';
+    case 'tempo': return '🥁 Tapped ✓';
     case 'color': return `${swatchHtml(a.color)} Colour picked`;
     case 'order': return a.order.map((it, i) => `${i + 1}. ${esc(it)}`).join('&nbsp; ');
     default: return `${fmt(a.value)}${q.unit ? ` ${esc(q.unit)}` : ''}`;
   }
 }
 
-const NEED = { map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
+const NEED = { map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', tempo: 'Tap the beat first (8 taps)', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
 
 function viewQuestion(i) {
   const q = today.questions[i];
@@ -212,6 +213,7 @@ function viewQuestion(i) {
     map: `<div class="map" id="map-${q.id}"></div><div class="maphint" id="maphint">${a ? 'Pin placed. Tap again to move it.' : 'Tap the map to drop your pin. Pinch to zoom.'}</div>`,
     percent: `<div id="w"></div>`,
     time: `<div id="w"></div>`,
+    tempo: `<div id="w"></div>`,
     color: `<div class="swatch-row"><span class="swatch ${a ? '' : 'empty'}" id="sw" ${a ? `style="background:${esc(a.color)}"` : ''}></span><span class="muted" id="swhint" style="font-size:14px">${a ? 'Your colour' : 'Drag in the box and on the rainbow bar to mix your colour'}</span></div><div id="w"></div>`,
     order: `<div class="hint muted" style="font-size:14px">Drag the items into the right order (first at the top).</div><div id="w"></div>`,
     number: `<div class="numwrap"><input id="num" inputmode="decimal" autocomplete="off" placeholder="Your guess" value="${a ? esc(String(a.raw ?? a.value)) : ''}">${q.unit ? `<span class="unit">${esc(q.unit)}</span>` : ''}</div>
@@ -249,6 +251,8 @@ function viewQuestion(i) {
     createPercent($('w'), { value: a?.value ?? null, onChange: (v) => { answers[q.id] = { value: v }; saveDraft(); } });
   } else if (q.kind === 'time') {
     createTimer($('w'), { target: q.target, done: !!a, onDone: (secs) => { answers[q.id] = { value: secs }; saveDraft(); } });
+  } else if (q.kind === 'tempo') {
+    createTempo($('w'), { hint: q.hint, done: !!a, onDone: (bpm) => { answers[q.id] = { value: bpm }; saveDraft(); } });
   } else if (q.kind === 'color') {
     createColorPicker($('w'), { value: a?.color ?? null, onChange: (hex) => {
       answers[q.id] = { color: hex }; saveDraft();

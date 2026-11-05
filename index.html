@@ -176,9 +176,11 @@
   /* ===== Short portrait areas, e.g. 1080×1312 next to another zone ===== */
   @media (orientation: portrait) and (min-aspect-ratio: 3/4) {
     html { font-size: min(1.75vw, 1.38vh); }
-    .right { grid-template-rows: 21rem; }
-    .results-grid { grid-template-columns: repeat(3, 1fr); grid-auto-rows: auto; height: 10.5rem; }
-    .r { grid-template-rows: auto auto 1fr; }
+    .right { grid-template-rows: 19.5rem; }
+    .results-grid { grid-template-columns: repeat(3, 1fr); grid-auto-rows: auto; height: 15.5rem; }
+    .r { grid-template-rows: auto auto auto 1fr; }
+    .r .rq { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+    .r .fact { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; font-size: .95rem; line-height: 1.3; align-self: start; }
     .r .ans { font-size: 1.9rem; }
     .r.map { grid-template-columns: 1fr; }
     .r.map .mini { display: none; }

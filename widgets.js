@@ -177,7 +177,7 @@ export function createTimer(el, { target, done = false, onDone = () => {} } = {}
 // Your turn: hum the song, tap the rhythm from memory (N taps, first tap starts). onDone(taps in ms from the first tap).
 
 export const PRACTICE_RHYTHM = [0, 500, 750, 1000, 1500, 2500, 3000];
-const MAX_PAUSE = 3000;
+const MAX_PAUSE = 12000;   // only a really long break restarts an attempt (some rhythms have long gaps)
 
 function tapCircle(cls, label, count) {
   return `<button type="button" class="tmp-circle ${cls}" aria-label="Tap"><span class="tmp-dot"></span><span class="tmp-label">${label}</span>${count != null ? `<span class="tmp-count">${count}</span>` : ''}</button>`;
@@ -278,7 +278,8 @@ export function createRhythm(el, { count, hint = '', words = null, done = false,
 }
 
 // For question authors: record the real rhythm by tapping along while the song plays.
-// Stops after a 2-second pause. onChange(taps | null).
+// Finish with the Done button (or it stops by itself after 8 seconds without a tap). onChange(taps | null).
+const RECORD_IDLE_STOP = 8000;
 export function createRecorder(el, { initial = null, onChange = () => {} } = {}) {
   let rec = initial;
   function render() {
@@ -287,22 +288,28 @@ export function createRecorder(el, { initial = null, onChange = () => {} } = {})
         <div class="tmp-verdict"><b>${rec.length} taps</b> · ${(rec[rec.length - 1] / 1000).toFixed(1)} s</div>
         <button type="button" class="btn ghost" data-a="again">Record again</button>
       </div>` : `<div class="tmp">
-        <p class="tmp-text">Play the song, and tap along with the part players should tap, <b>one tap per note or syllable</b>. Recording stops after a 2-second pause.</p>
+        <p class="tmp-text">Play the song, and tap along with exactly what players should tap. Long gaps are fine. Press <b>Done</b> after your last tap.</p>
         ${tapCircle('go', 'Tap', '0 taps')}
+        <div class="tmp-row"><button type="button" class="btn ghost" data-a="reset">Start over</button><button type="button" class="btn" data-a="done" disabled>Done</button></div>
       </div>`;
     if (rec) { el.querySelector('[data-a="again"]').onclick = () => { rec = null; onChange(null); render(); }; return; }
-    const circle = el.querySelector('.tmp-circle'), cnt = el.querySelector('.tmp-count');
+    const circle = el.querySelector('.tmp-circle'), cnt = el.querySelector('.tmp-count'), doneBtn = el.querySelector('[data-a="done"]');
     let taps = [], timer = null;
+    const finish = () => {
+      clearTimeout(timer);
+      if (taps.length < 3) { cnt.textContent = 'Need at least 3 taps'; return; }
+      rec = taps.slice(0, 20).map((t) => Math.round(t - taps[0])); onChange(rec); render();
+    };
     circle.addEventListener('pointerdown', (e) => {
       e.preventDefault(); ripple(circle);
       taps.push(e.timeStamp);
       cnt.textContent = `${taps.length} tap${taps.length === 1 ? '' : 's'}`;
+      doneBtn.disabled = taps.length < 3;
       clearTimeout(timer);
-      timer = setTimeout(() => {
-        if (taps.length < 3) { taps = []; cnt.textContent = 'Need at least 3 taps'; return; }
-        rec = taps.slice(0, 20).map((t) => Math.round(t - taps[0])); onChange(rec); render();
-      }, 2000);
+      timer = setTimeout(finish, RECORD_IDLE_STOP);
     });
+    doneBtn.onclick = finish;
+    el.querySelector('[data-a="reset"]').onclick = () => { clearTimeout(timer); taps = []; cnt.textContent = '0 taps'; doneBtn.disabled = true; };
   }
   render();
   return { get: () => rec };

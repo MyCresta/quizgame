@@ -19,7 +19,7 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
   - **Sort**: drag 3–6 items into the right order (scored by how many pairs are in the right order)
   - **Rhythm**: tap a famous rhythm from memory. The author says exactly what to tap: either sung words (typed with
     dashes between syllables, shown to players as boxes that light up per tap) or something else ("the whistling at the
-    very start"), and records the real rhythm by tapping along. Players practise on the opening of "Helan går" (with syllables lighting up), then tap it.
+    very start"), and records the real rhythm by tapping along. Players practise on the first line of "Små grodorna" (with syllables lighting up), then tap it.
     Scored on rhythm only: your first tap lines up with the first note, your taps are stretched to the speed that fits all notes best (least squares), and the average miss per note is scored, so speed never counts. After submitting, players see their taps against the real rhythm; the next day the screen shows the closest player's taps. Test it in Admin → Try it (built-in: Tetris, Nokia ringtone, Jingle Bells). Questions replaced with "Put this song in the quiz" are kept in Backups → Spare questions.
 - **Scoring**: every answer scores 1–10 000 points, so 30 000 max per day.
   - Number, ratio scoring (default): an exact answer gets 10 000; being off by 10× (Ballpark), ~3× (Tight) or 100× (Loose) gets 1 point.

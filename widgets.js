@@ -173,13 +173,13 @@ export function createTimer(el, { target, done = false, onDone = () => {} } = {}
 }
 
 // ---------- Tap the rhythm ----------
-// Practice: watch the start of "Helan går" (traditional), then tap it back and see a timeline.
+// Practice: watch the first line of "Små grodorna" (traditional), then tap it back and see a timeline.
 // Your turn: hum the song, tap the rhythm from memory (N taps, first tap starts). onDone(taps in ms from the first tap).
 
-// Practice tune: the opening of "Helan går" (traditional), from the sheet music in 2/4 at ♩ = 124.
-// Onsets in eighth notes: E2 G2 | C2 z>E | D D/ D/ D D | E>C C2
-export const PRACTICE_RHYTHM = [0, 2, 4, 7.5, 8, 9, 9.5, 10, 11, 12, 13.5, 14].map((e) => Math.round(e * 242));
-export const PRACTICE_WORDS = ['He', 'lan', 'går', 'sjung', 'hopp', 'fa', 'de', 'ral', 'lan', 'lal', 'lan', 'lej'];
+// Practice tune: the first line of "Små grodorna" (traditional), from the sheet music: 2/4 with a pickup, ♩ ≈ 112.
+// Onsets in eighth notes: c | A>A A c | A>A A c | d c B A | G2
+export const PRACTICE_RHYTHM = [0, 1, 2.5, 3, 4, 5, 6.5, 7, 8, 9, 10, 11, 12, 13].map((e) => Math.round(e * 268));
+export const PRACTICE_WORDS = ['Små', 'gro', 'dor', 'na', 'små', 'gro', 'dor', 'na', 'är', 'lus', 'ti', 'ga', 'att', 'se'];
 const MAX_PAUSE = 12000;   // only a really long break restarts an attempt (some rhythms have long gaps)
 
 function tapCircle(cls, label, count) {
@@ -247,7 +247,7 @@ export function createRhythm(el, { count, hint = '', words = null, done = false,
     if (stage === 'practice') {
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">1 · Practice</div>
-        <p class="tmp-text">Watch the circle tap the start of <b>Helan går</b>, one flash per syllable. Then sing it in your head and tap it back. This is just practice, not today's song.</p>
+        <p class="tmp-text">Watch the circle tap the first line of <b>Små grodorna</b>, one flash per syllable. Then sing it in your head and tap it back. This is just practice, not today's song.</p>
         <div class="tmp-words">${PRACTICE_WORDS.map((w, k) => `<span data-k="${k}">${w}</span>`).join('')}</div>
         <div class="tmp-slot"></div>
         <div class="tmp-feedback" aria-live="polite">&nbsp;</div>

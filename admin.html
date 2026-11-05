@@ -49,6 +49,12 @@
   .try-result div { background: var(--panel-2); border-radius: 12px; padding: 10px 6px; display: grid; gap: 4px; font-size: 13px; }
   .try-result b { font-size: 20px; font-variant-numeric: tabular-nums; }
   .try-result .pts { color: var(--mint); }
+  .tl { background: var(--panel-2); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+  .tl-lbl { fill: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .tl-beat { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+  .tl-tap { fill: var(--mint); }
+  .tl-link { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .7; }
+  .tl-verdict { font-size: 14px; text-align: center; margin: 0; }
   label.check { display: flex; gap: 10px; align-items: center; font-size: 15px; }
   label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
 </style>
@@ -249,11 +255,11 @@ function bindActions() {
 // Tempos from songbpm.com / musiciwant.com
 const TRY_SONGS = [
   { song: 'Stayin\u2019 Alive', artist: 'Bee Gees', bpm: 103, hint: 'Think of the chorus' },
-  { song: 'We Will Rock You', artist: 'Queen', bpm: 81, hint: 'The stomp-stomp-clap' },
+  { song: 'We Will Rock You', artist: 'Queen', bpm: 81, hint: 'One tap per stomp and clap, plus one in the pause' },
   { song: 'Dancing Queen', artist: 'ABBA', bpm: 101, hint: 'Think of the chorus' },
-  { song: 'Another One Bites the Dust', artist: 'Queen', bpm: 110, hint: 'The bass line' },
+  { song: 'Another One Bites the Dust', artist: 'Queen', bpm: 110, hint: 'The beat you nod to, not the bass rhythm' },
   { song: 'Billie Jean', artist: 'Michael Jackson', bpm: 117, hint: 'The drum beat at the start' },
-  { song: 'Seven Nation Army', artist: 'The White Stripes', bpm: 124, hint: 'The famous riff' },
+  { song: 'Seven Nation Army', artist: 'The White Stripes', bpm: 124, hint: 'The steady drum beat, not the riff' },
 ];
 
 function openTry(t) {
@@ -267,16 +273,46 @@ function openTry(t) {
   </div>`;
   createTempo($('tryWidget'), {
     hint: t.hint,
-    onDone: (bpm) => {
+    onDone: (bpm, taps) => {
       const pts = tempoPoints(t.bpm, bpm, 0.5);
       $('tryResult').innerHTML = `<div class="try-result">
         <div><span class="muted">You tapped</span><b>${Math.round(bpm)} BPM</b></div>
         <div><span class="muted">Real tempo</span><b>${Math.round(t.bpm)} BPM</b></div>
         <div><span class="muted">Points</span><b class="pts">${fmtPts(pts)}</b></div>
-      </div><p class="hint" style="text-align:center">Press Redo to try again, or pick another song above.</p>`;
+      </div>
+      ${taps?.length ? tapTimeline(taps, t.bpm, bpm) : ''}
+      <p class="hint" style="text-align:center">Press Redo to try again, or pick another song above.</p>`;
     },
   });
   area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Timeline: the song's real beats (lined up with your first tap) against your taps.
+function tapTimeline(taps, realBpm, yourBpm) {
+  const beat = 60000 / realBpm;
+  const total = Math.max(taps[taps.length - 1], beat * 7) + beat * 0.6;
+  const W = 340, L = 8, R = 8, x = (ms) => L + (ms / total) * (W - L - R);
+  const beats = [];
+  for (let ms = 0; ms <= total; ms += beat) beats.push(ms);
+  const nearest = (ms) => beats.reduce((a, b) => (Math.abs(b - ms) < Math.abs(a - ms) ? b : a));
+  const ratio = yourBpm / realBpm;
+  const oct = Math.log2(ratio);
+  let verdict;
+  if (Math.abs(oct + 1) < 0.15) verdict = 'You tapped <b>every other beat</b> (half speed). That still earns 80 % of the points.';
+  else if (Math.abs(oct - 1) < 0.15) verdict = 'You tapped <b>twice per beat</b> (double speed). That still earns 80 % of the points.';
+  else if (Math.abs(ratio - 1) < 0.04) verdict = '<b>Spot on!</b> Your taps follow the song\u2019s beat.';
+  else verdict = `You were <b>${Math.round(Math.abs(ratio - 1) * 100)} % too ${ratio > 1 ? 'fast' : 'slow'}</b>: your taps ${ratio > 1 ? 'run ahead of' : 'fall behind'} the orange beats.`;
+  const half = Math.abs(oct + 1) < 0.15 || Math.abs(oct - 1) < 0.15;
+  return `<div class="tl">
+    <svg viewBox="0 0 ${W} 96" width="100%" role="img" aria-label="Your taps compared with the song's beat">
+      <text x="${L}" y="12" class="tl-lbl">Song's beat</text>
+      ${beats.map((ms) => `<line x1="${x(ms)}" x2="${x(ms)}" y1="20" y2="44" class="tl-beat"/>`).join('')}
+      ${half ? '' : taps.map((ms) => `<line x1="${x(ms)}" x2="${x(nearest(ms))}" y1="70" y2="44" class="tl-link"/>`).join('')}
+      <text x="${L}" y="92" class="tl-lbl">Your taps</text>
+      ${taps.map((ms) => `<circle cx="${x(ms)}" cy="70" r="5.5" class="tl-tap"/>`).join('')}
+    </svg>
+    <p class="tl-verdict">${verdict}</p>
+  </div>`;
 }
 
 // ---------- Office screen link + join-code check ----------

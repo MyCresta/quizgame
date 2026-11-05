@@ -202,7 +202,7 @@ export function createTempo(el, { hint = '', done = false, onDone = () => {} } =
     if (stage === 'practice') {
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">1 · Practice</div>
-        <p class="tmp-text">Tap the circle along with its pulse to get the feel. This is just an example beat, <b>not</b> the song's tempo.</p>
+        <p class="tmp-text">Tap the circle along with its pulse to get the feel: one tap per beat, evenly spaced. This is just an example beat, <b>not</b> the song's tempo.</p>
         <button type="button" class="tmp-circle demo" aria-label="Tap"><span class="tmp-dot"></span><span class="tmp-label">Tap</span></button>
         <div class="tmp-feedback" aria-live="polite">Tap along with the pulse</div>
         <button type="button" class="btn block" data-a="ready">I'm ready for the real one →</button>
@@ -231,7 +231,7 @@ export function createTempo(el, { hint = '', done = false, onDone = () => {} } =
       taps = [];
       el.innerHTML = `<div class="tmp">
         <div class="tmp-step">2 · Your turn</div>
-        <p class="tmp-text">Hum the song in your head${hint ? ` <span class="tmp-hint">(${esc(hint)})</span>` : ''}. When you feel the beat, tap the circle along with it. <b>Your first tap starts it</b>, no rush.</p>
+        <p class="tmp-text">Hum the song in your head${hint ? ` <span class="tmp-hint">(${esc(hint)})</span>` : ''}. Tap the <b>steady beat</b>, the one you'd clap or nod along to, not the melody or the words. <b>Your first tap starts it</b>, no rush.</p>
         <button type="button" class="tmp-circle go" aria-label="Tap"><span class="tmp-label">Tap</span><span class="tmp-count">0 / ${TAPS}</span></button>
         <div class="tmp-feedback" aria-live="polite">&nbsp;</div>
         <button type="button" class="btn ghost block" data-a="practice">← Practice again</button>
@@ -245,8 +245,9 @@ export function createTempo(el, { hint = '', done = false, onDone = () => {} } =
         if (taps.length === 1) fb.textContent = 'Keep tapping along with the beat…';
         if (taps.length < TAPS) return;
         const r = tempoFromTaps(taps);
-        if (r.unevenness > 0.18) { pending = r.bpm; stage = 'uneven'; render(); return; }
-        onDone(r.bpm); stage = 'done'; navigator.vibrate?.(30); render();
+        const rel = taps.map((t) => t - taps[0]);
+        if (r.unevenness > 0.18) { pending = { bpm: r.bpm, taps: rel }; stage = 'uneven'; render(); return; }
+        onDone(r.bpm, rel); stage = 'done'; navigator.vibrate?.(30); render();
       });
       el.querySelector('[data-a="practice"]').onclick = () => { stage = 'practice'; render(); };
       return;
@@ -259,7 +260,7 @@ export function createTempo(el, { hint = '', done = false, onDone = () => {} } =
         <button type="button" class="btn ghost block" data-a="keep">Use it anyway</button>
       </div>`;
       el.querySelector('[data-a="again"]').onclick = () => { stage = 'turn'; render(); };
-      el.querySelector('[data-a="keep"]').onclick = () => { onDone(pending); stage = 'done'; render(); };
+      el.querySelector('[data-a="keep"]').onclick = () => { onDone(pending.bpm, pending.taps); stage = 'done'; render(); };
       return;
     }
     el.innerHTML = `<div class="tmp">

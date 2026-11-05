@@ -20,7 +20,7 @@ Three range questions a day, a QR code to play from your phone, and a scoreboard
   - **Rhythm**: tap a famous rhythm from memory. The author says exactly what to tap: either sung words (typed with
     dashes between syllables, shown to players as boxes that light up per tap) or something else ("the whistling at the
     very start"), and records the real rhythm by tapping along. Players practise on "shave and a haircut", then tap it.
-    Scored half on speed (total length) and half on rhythm (the gaps). Test it in Admin → Try it.
+    Scored on rhythm only: the taps are stretched to the real speed (least-squares fit) and the average miss per note is scored, so speed never counts. Test it in Admin → Try it (built-in: Tetris, Nokia ringtone, Jingle Bells).
 - **Scoring**: every answer scores 1–10 000 points, so 30 000 max per day.
   - Number, ratio scoring (default): an exact answer gets 10 000; being off by 10× (Ballpark), ~3× (Tight) or 100× (Loose) gets 1 point.
   - Number, plain difference: the author sets how far off scores 1 point (good for years).

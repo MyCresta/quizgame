@@ -173,34 +173,42 @@ export function guessHtml(q, g) {
 }
 
 // ---------- Tap the rhythm ----------
-// Mirror of the database scoring: half speed (total length) + half rhythm (shape of the gaps).
-export function rhythmPoints(ref, taps, tol = 0.5) {
+// Speed doesn't count: the taps are stretched/shifted to best fit the real rhythm (least squares),
+// and only how far each note lands from where it should be is scored. Mirror of quiz_rhythm_points.
+export function rhythmFit(ref, taps) {
   const n = ref.length;
-  if (!taps || taps.length !== n || n < 2) return 1;
-  const dr = ref[n - 1] - ref[0], du = taps[n - 1] - taps[0];
-  if (!(du > 0) || !(dr > 0)) return 1;
-  const st = Math.max(0, 1 - Math.abs(Math.log2(du / dr)) / tol) ** 1.5;
+  if (!taps || taps.length !== n || n < 2) return null;
+  const mr = ref.reduce((x, y) => x + y, 0) / n, mt = taps.reduce((x, y) => x + y, 0) / n;
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) { sxy += (ref[i] - mr) * (taps[i] - mt); sxx += (ref[i] - mr) ** 2; }
+  const dr = ref[n - 1] - ref[0];
+  if (!(sxx > 0) || !(dr > 0)) return null;
+  const b = sxy / sxx, a = mt - b * mr;
+  if (!(b > 0)) return null;
   let err = 0;
-  for (let i = 1; i < n - 1; i++) err += Math.abs((ref[i] - ref[0]) / dr - (taps[i] - taps[0]) / du);
-  if (n > 2) err /= n - 2;
-  const ss = Math.max(0, 1 - err / (tol * 0.2));
-  return Math.max(1, Math.min(10000, Math.round(10000 * (0.5 * st + 0.5 * ss))));
+  for (let i = 0; i < n; i++) err += Math.abs(taps[i] - (a + b * ref[i])) / b;
+  return { a, b, err: err / n / (dr / (n - 1)) };   // err: average miss as a share of an average gap between notes
+}
+
+export function rhythmPoints(ref, taps, tol = 0.5) {
+  const fit = rhythmFit(ref, taps);
+  if (!fit) return 1;
+  const s = Math.max(0, 1 - fit.err / (tol * 0.5)) ** 1.5;
+  return Math.max(1, Math.min(10000, Math.round(10000 * s)));
 }
 
 export function rhythmVerdict(ref, taps) {
-  const n = ref.length;
-  const dr = ref[n - 1], du = taps[n - 1] - taps[0];
-  const ratio = du / dr;
-  let err = 0;
-  for (let i = 1; i < n - 1; i++) err += Math.abs(ref[i] / dr - (taps[i] - taps[0]) / du);
-  if (n > 2) err /= n - 2;
-  const speed = Math.abs(ratio - 1) < 0.05 ? '<b>right speed</b>' : `<b>${Math.round(Math.abs(ratio - 1) * 100)} % too ${ratio < 1 ? 'fast' : 'slow'}</b>`;
-  const shape = err < 0.03 ? '<b>rhythm spot on</b>' : err < 0.07 ? '<b>rhythm close</b>' : '<b>rhythm a bit off</b>';
-  return `${speed}, ${shape}`;
+  const fit = rhythmFit(ref, taps);
+  if (!fit) return '<b>rhythm way off</b>';
+  return fit.err < 0.04 ? '<b>rhythm spot on</b>' : fit.err < 0.08 ? '<b>rhythm close</b>' : fit.err < 0.15 ? '<b>rhythm a bit off</b>' : '<b>rhythm quite off</b>';
 }
 
-// Timeline: orange = the real rhythm, green = taps (both start at the first tap).
+// Timeline: orange = the real rhythm, green = your taps stretched to the same speed.
 export function rhythmTimeline(ref, taps, { compact = false } = {}) {
+  const fit = taps && rhythmFit(ref, taps);
+  if (fit) taps = taps.map((t) => (t - fit.a) / fit.b);   // same speed as the real one, so only timing differences show
+  const lo = Math.min(0, ...(taps || [0]));
+  if (lo < 0) { ref = ref.map((t) => t - lo); taps = taps.map((t) => t - lo); }
   const end = Math.max(ref[ref.length - 1], taps ? taps[taps.length - 1] : 0) * 1.04 + 1;
   const W = 340, L = 6, x = (ms) => L + (ms / end) * (W - 2 * L);
   const H = taps ? (compact ? 46 : 78) : 34;

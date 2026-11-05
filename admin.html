@@ -47,7 +47,7 @@
   .try-phone { max-width: 420px; justify-self: center; width: 100%; }
   .try-phone .qn { color: var(--accent); font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: .1em; }
   .try-phone .prompt { font-size: 22px; font-weight: 700; line-height: 1.2; }
-  .try-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+  .try-result { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; text-align: center; }
   .try-result div { background: var(--panel-2); border-radius: 12px; padding: 10px 6px; display: grid; gap: 4px; font-size: 13px; }
   .try-result b { font-size: 20px; font-variant-numeric: tabular-nums; }
   .try-result .pts { color: var(--mint); }
@@ -258,14 +258,21 @@ function bindActions() {
 
 // ---------- Try it: tap the rhythm sandbox ----------
 const TRY_KEY = 'bp_try_rhythms';
-const BUILT_IN = { song: 'Shave and a Haircut… Two Bits', hint: 'The classic door knock', rhythm: PRACTICE_RHYTHM, builtIn: true };
+// Written from the sheet music (all public domain tunes). Beats -> ms at a comfortable speed; speed doesn't affect scoring.
+const beats = (b, ms) => b.map((x) => Math.round(x * ms));
+const BUILT_INS = [
+  { song: 'Shave and a Haircut… Two Bits', hint: 'The classic door knock', rhythm: PRACTICE_RHYTHM, builtIn: true, practice: true },
+  { title: 'Tetris theme', song: 'the Tetris theme', hint: 'The very start of the Tetris theme', rhythm: beats([0, 1, 1.5, 2, 3, 3.5, 4], 400), builtIn: true },
+  { title: 'Nokia ringtone', song: 'the Nokia ringtone', hint: 'The classic Nokia ringtone, once through', rhythm: beats([0, 0.5, 1, 2, 3, 3.5, 4, 5, 6, 6.5, 7, 8, 9], 360), builtIn: true },
+  { song: 'Jingle Bells', words: syllables('Jin-gle bells jin-gle bells jin-gle all the way'), hint: '', rhythm: beats([0, 1, 2, 4, 5, 6, 8, 9, 10, 11.5, 12], 450), builtIn: true },
+];
 const loadTries = () => { try { return JSON.parse(store.get(TRY_KEY) || '[]'); } catch { return []; } };
 const saveTries = (list) => store.set(TRY_KEY, JSON.stringify(list));
 
 function setupTry() {
   const renderList = () => {
-    const list = [BUILT_IN, ...loadTries()];
-    $('tryList').innerHTML = list.map((t, i) => `<div class="try-song" data-i="${i}"><b>${esc(t.song)}</b><span>${t.rhythm.length} taps · ${(t.rhythm[t.rhythm.length - 1] / 1000).toFixed(1)} s</span>${t.builtIn ? '' : `<button type="button" class="try-del" data-del="${i - 1}" title="Remove">✕</button>`}</div>`).join('');
+    const list = [...BUILT_INS, ...loadTries()];
+    $('tryList').innerHTML = list.map((t, i) => `<div class="try-song" data-i="${i}"><b>${esc(t.title || t.song)}</b><span>${t.rhythm.length} taps · ${(t.rhythm[t.rhythm.length - 1] / 1000).toFixed(1)} s</span>${t.builtIn ? '' : `<button type="button" class="try-del" data-del="${i - BUILT_INS.length}" title="Remove">✕</button>`}</div>`).join('');
     $('tryList').querySelectorAll('.try-song').forEach((el) => el.onclick = (e) => {
       if (e.target.dataset.del !== undefined) { const l = loadTries(); l.splice(+e.target.dataset.del, 1); saveTries(l); renderList(); return; }
       openTry(list[+el.dataset.i]);
@@ -301,7 +308,7 @@ function openTry(t) {
     <div id="tryWidget"></div>
     <div id="tryResult"></div>
   </div>
-  ${t.builtIn ? '' : `<div class="card"><h2>Put this song in the quiz</h2>
+  ${t.practice ? '' : `<div class="card"><h2>Put this song in the quiz</h2>
     <p class="hint">Pick the question it should replace. You'll see the set in the editor first, then press Save.</p>
     <div id="usePick">${usePicker()}</div></div>`}`;
   area.querySelectorAll('[data-use]').forEach((b) => b.onclick = () => {
@@ -319,12 +326,11 @@ function openTry(t) {
     onDone: (taps) => {
       const pts = rhythmPoints(t.rhythm, taps, 0.5);
       $('tryResult').innerHTML = `<div class="try-result">
-        <div><span class="muted">Your length</span><b>${(taps[taps.length - 1] / 1000).toFixed(1)} s</b></div>
-        <div><span class="muted">Real length</span><b>${(t.rhythm[t.rhythm.length - 1] / 1000).toFixed(1)} s</b></div>
+        <div><span class="muted">Your speed</span><b>${Math.round(100 * t.rhythm[t.rhythm.length - 1] / Math.max(1, taps[taps.length - 1]))} %</b></div>
         <div><span class="muted">Points</span><b class="pts">${fmtPts(pts)}</b></div>
       </div>
       <div class="tl">${rhythmTimeline(t.rhythm, taps)}<p class="tl-verdict">${rhythmVerdict(t.rhythm, taps)}</p></div>
-      <p class="hint" style="text-align:center">Press "Change my answer" to try again, or pick another song above.</p>`;
+      <p class="hint" style="text-align:center">Speed doesn\u2019t count: your taps (green) are stretched to the real speed and only the timing is scored. Press "Change my answer" to try again.</p>`;
     },
   });
   area.scrollIntoView({ behavior: 'smooth', block: 'start' });

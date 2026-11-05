@@ -12,7 +12,7 @@ const RADIUS = [[300, 'Within 300 km (same region)'], [1000, 'Within 1 000 km (s
 // Strictness presets for the other types: value = how far off scores 1 point
 const PCT_TOL = [[15, 'Tight: 15 percentage points off scores 1 point'], [30, 'Normal: 30 points off scores 1 point'], [50, 'Loose: 50 points off scores 1 point']];
 const TIME_TOL = [[0.15, 'Tight: 15 % of the target off scores 1 point'], [0.3, 'Normal: 30 % off scores 1 point'], [0.5, 'Loose: 50 % off scores 1 point']];
-const TEMPO_TOL = [[0.3, 'Tight: speed and rhythm must be close'], [0.5, 'Normal'], [0.8, 'Loose']];
+const TEMPO_TOL = [[0.3, 'Tight: every note must land close'], [0.5, 'Normal'], [0.8, 'Loose']];
 const COLOR_TOL = [[50, 'Tight: only close shades score well'], [70, 'Normal: any shade of the right colour scores well'], [100, 'Loose: generous for neighbouring colours too']];
 
 export const KINDS = [
@@ -98,7 +98,7 @@ function block(uid, i) {
       <label class="field hidden" data-part="tm-other"><span>What to tap (shown big to players)</span><input class="input" data-f="hint" maxlength="80" placeholder="e.g. Tap along with the whistling at the very start"></label>
       <div class="field"><span>Record the real rhythm</span><div data-f="recorder"></div></div>
       <label class="field"><span>How strict is the scoring?</span><select class="input" data-f="tempotol">${opts(TEMPO_TOL, 0.5)}</select></label>
-      <div class="hint">Play the song and tap along with exactly what players will tap. They see the number of taps, then tap it from memory, and score on speed (total length) and rhythm (the gaps).</div>
+      <div class="hint">Play the song and tap along with exactly what players will tap. They see the number of taps, then tap it from memory, and score on the rhythm only (the gaps between notes). Speed doesn't count, so tap at whatever speed feels natural.</div>
     </div>
 
     <div data-part="order" class="hidden" style="display:grid;gap:12px">

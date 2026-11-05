@@ -190,6 +190,7 @@
   .locked { height: 100%; display: grid; place-content: center; justify-items: center; gap: 2rem; text-align: center; }
   .locked .logo { font-size: 6rem; }
   .locked p { font-size: 2rem; color: var(--muted); line-height: 1.4; margin: 0; }
+  .locked .diag { font-family: var(--mono); font-size: 1rem; color: var(--line); line-height: 1.6; word-break: break-all; max-width: 80%; }
   .offline { position: fixed; top: 1rem; left: 50%; transform: translateX(-50%); background: var(--danger); color: #fff; padding: .4rem 1rem; border-radius: 999px; font-size: 1rem; font-weight: 700; display: none; }
 </style>
 </head>
@@ -249,7 +250,10 @@ function qrSvg(text) {
   return q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
 }
 const addUrl = pageUrl('add.html');
-const screenKey = new URLSearchParams(location.search).get('screen');
+// The screen key can be in the query (?screen=…) or the hash (#screen=…). Take just the 24-character key,
+// in case the screen software adds its own bits to the address.
+const rawKey = new URLSearchParams(location.search).get('screen') ?? new URLSearchParams(location.hash.slice(1)).get('screen');
+const screenKey = ((location.href.match(/[?&#]screen=([0-9a-f]{24})/i) || [])[1] || rawKey || '').toLowerCase() || null;
 
 // QR link to the phone page, carrying today's join code when the screen has its key.
 function setPlayQr(code) {
@@ -260,10 +264,17 @@ function setPlayQr(code) {
 
 // Shown when the join-code check is on and this browser isn't the office screen.
 function showLocked() {
+  const got = screenKey ? `${esc(String(screenKey).slice(0, 4))}… (${String(screenKey).length} characters, not recognised)` : 'none';
+  const addr = (location.origin + location.pathname + location.search.replace(/(screen=)[^&]*/i, '$1…') + location.hash.replace(/(screen=)[^&]*/i, '$1…'));
   document.querySelector('.screen').innerHTML = `<div class="locked">
     <div class="logo">${esc(CONFIG.title)}<span class="ball"></span></div>
     <p>This is the office quiz screen.<br>Scan the QR code on the screen at the office to play.</p>
+    <div class="diag">Screen key received: ${got}<br>Address: ${esc(addr)}</div>
   </div>`;
+  // Recover by itself if the key gets fixed or the check is switched off
+  setInterval(async () => {
+    try { const r = await rpc('quiz_screen', { p_key: screenKey }); if (!r.enforced || r.valid) location.reload(); } catch {}
+  }, 30_000);
 }
 
 let today = null;
@@ -467,7 +478,8 @@ async function refreshToday() {
 }
 
 async function refreshAll() {
-  const [t, sb, res] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard'), rpc('quiz_results')]);
+  const [t, sb, res, scr] = await Promise.all([rpc('quiz_today'), rpc('quiz_scoreboard'), rpc('quiz_results'), rpc('quiz_screen', { p_key: screenKey }).catch(() => null)]);
+  if (scr) { if (scr.enforced && !scr.valid) { location.reload(); return; } setPlayQr(scr.code); }
   today = t;
   renderToday(t); renderBoard(sb); renderResults(res);
 }

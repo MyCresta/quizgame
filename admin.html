@@ -226,6 +226,12 @@ async function loadScreenCard() {
     card.innerHTML = `<h2>Office screen</h2>
       <p class="hint">Use this address in the screen's web page template in Dise. It contains a secret key, so don't share it. The QR code on that screen carries a code that changes every day.</p>
       <div class="search"><input class="input num" id="screenUrl" readonly value="${esc(url)}"><button type="button" class="btn ghost" id="copyUrl">Copy</button></div>
+      <div class="hint" style="font-size:15px">${r.seen_minutes_ago != null && r.seen_minutes_ago <= 15
+        ? `<span style="color:var(--mint)">✓ The office screen is using this address</span> (last check-in ${r.seen_minutes_ago < 1 ? 'just now' : `${r.seen_minutes_ago} min ago`}).`
+        : r.seen_minutes_ago != null
+          ? `<span style="color:var(--gold)">⚠ The office screen last checked in with this address ${r.seen_minutes_ago} min ago.</span> It checks in every 10 minutes, so it may have stopped using it.`
+          : '<span style="color:var(--danger)">✗ No screen has used this address yet.</span> Update the address in Dise and wait for the screen to reload.'}
+        <button type="button" id="refreshScreen" style="border:0;background:none;color:var(--mint);text-decoration:underline;cursor:pointer;padding:0;font:inherit">Refresh</button></div>
       <div class="set" style="background:var(--panel-2)">
         <div class="head"><b>Join-code check: ${r.enforce ? '<span style="color:var(--mint)">ON</span>' : '<span style="color:var(--muted)">OFF</span>'}</b></div>
         <p class="hint">${r.enforce
@@ -235,8 +241,12 @@ async function loadScreenCard() {
           <button type="button" id="newKey" class="danger">Make a new screen key</button></div>
       </div>`;
     $('copyUrl').onclick = async () => { try { await navigator.clipboard.writeText(url); toast('Copied', true); } catch { $('screenUrl').select(); } };
+    $('refreshScreen').onclick = () => loadScreenCard();
     $('toggleEnforce').onclick = async () => {
-      if (!r.enforce && !confirm('Turn on the join-code check? Make sure the office screen already uses the new address and shows a QR code.')) return;
+      const seen = r.seen_minutes_ago != null && r.seen_minutes_ago <= 15;
+      if (!r.enforce && !confirm(seen
+        ? 'Turn on the join-code check?'
+        : 'The office screen has NOT checked in with the new address recently. If you turn the check on now, the screen will show no quiz. Turn it on anyway?')) return;
       try { await admin('set_enforce', { on: !r.enforce }); toast(r.enforce ? 'Check turned off' : 'Check turned on', true); loadScreenCard(); } catch (e) { toast(e.message); }
     };
     $('newKey').onclick = async () => {

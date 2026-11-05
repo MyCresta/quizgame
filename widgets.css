@@ -79,3 +79,5 @@
 .tmp-words { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .tmp-words span { background: var(--panel-2); border-radius: 10px; padding: 8px 10px; font-weight: 800; font-size: 18px; transition: background .08s, color .08s; }
 .tmp-words span.on { background: var(--accent); color: var(--accent-ink); }
+.tmp-circle.full { background: var(--mint); color: #062018; box-shadow: 0 8px 30px rgba(94, 224, 177, .25); cursor: default; }
+.tmp-row .btn { white-space: nowrap; }

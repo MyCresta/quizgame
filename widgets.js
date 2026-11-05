@@ -197,21 +197,46 @@ export function syllables(text) {
   return String(text || '').trim().split(/[\s\-·]+/).map((x) => x.trim()).filter(Boolean);
 }
 
+// Just the player's own taps as dots (doesn't give away the real rhythm).
+function tapsStrip(taps) {
+  const W = 340, L = 8, end = Math.max(1, taps[taps.length - 1]);
+  const x = (ms) => L + (ms / end) * (W - 2 * L);
+  return `<svg class="rtl" viewBox="0 0 ${W} 22" width="100%" role="img" aria-label="Your taps">
+    <line x1="${L}" x2="${W - L}" y1="11" y2="11" stroke="var(--line)" stroke-width="2"/>
+    ${taps.map((ms) => `<circle cx="${x(ms)}" cy="11" r="5.5" class="rtl-tap"/>`).join('')}</svg>`;
+}
+const GUARD_MS = 700;   // buttons ignore taps this long after the last tap, so an extra tap can't hit them
+
 export function createRhythm(el, { count, hint = '', words = null, done = false, onDone = () => {} } = {}) {
   let stage = done ? 'done' : 'practice';
   let cancelDemo = () => {};
+  let pending = null;   // a finished attempt that isn't locked in yet
 
+  // Collects exactly n taps, then the circle goes inert: extra taps do nothing until the player presses Try again.
   function collectTaps(circle, n, counter, fb, finish, onTap = () => {}) {
-    let taps = [];
+    let taps = [], full = false;
     circle.addEventListener('pointerdown', (e) => {
-      e.preventDefault(); ripple(circle);
+      e.preventDefault();
+      if (full) return;
+      ripple(circle);
       if (taps.length && e.timeStamp - taps[taps.length - 1] > MAX_PAUSE) { taps = []; fb.textContent = 'That pause was long, so we started over.'; }
       taps.push(e.timeStamp);
       onTap(taps.length);
       counter.textContent = `${taps.length} / ${n}`;
       if (taps.length === 1) fb.textContent = 'Keep going…';
-      if (taps.length === n) { const rel = taps.map((t) => Math.round(t - taps[0])); taps = []; finish(rel); }
+      if (taps.length === n) {
+        full = true;
+        circle.classList.add('full'); circle.querySelector('.tmp-label').textContent = '✓';
+        counter.textContent = `${n} / ${n}`;
+        navigator.vibrate?.(30);
+        finish(taps.map((t) => Math.round(t - taps[0])));
+      }
     });
+  }
+  // Show buttons but ignore presses for a moment (catches the "one tap too many").
+  function guard(btns) {
+    btns.forEach((b) => { b.disabled = true; });
+    setTimeout(() => btns.forEach((b) => { b.disabled = false; }), GUARD_MS);
   }
 
   function render() {
@@ -222,25 +247,30 @@ export function createRhythm(el, { count, hint = '', words = null, done = false,
         <p class="tmp-text">Watch the circle knock a rhythm (<i>"shave and a haircut… two bits"</i>), then tap it back, <b>one tap per knock</b>. This is just practice, not today's song.</p>
         <div class="tmp-slot"></div>
         <div class="tmp-feedback" aria-live="polite">&nbsp;</div>
+        <button type="button" class="btn ghost block" data-a="again" hidden>↻ Try again</button>
         <div class="tmp-row"><button type="button" class="btn ghost" data-a="show">▶ Show again</button><button type="button" class="btn" data-a="ready">Ready →</button></div>
       </div>`;
-      const slot = el.querySelector('.tmp-slot'), fb = el.querySelector('.tmp-feedback');
+      const slot = el.querySelector('.tmp-slot'), fb = el.querySelector('.tmp-feedback'), again = el.querySelector('[data-a="again"]');
       const n = PRACTICE_RHYTHM.length;
-      const show = () => {
-        cancelDemo();
-        slot.innerHTML = tapCircle('demo', 'Watch', null);
-        fb.textContent = 'Watch the rhythm…';
-        cancelDemo = playRhythm(slot.querySelector('.tmp-circle'), PRACTICE_RHYTHM, () => {
-          slot.innerHTML = tapCircle('go', 'Tap', `0 / ${n}`);
-          const c = slot.querySelector('.tmp-circle');
-          fb.textContent = 'Now tap it back. Your first tap starts it.';
-          collectTaps(c, n, c.querySelector('.tmp-count'), fb, (taps) => {
-            const pts = rhythmPoints(PRACTICE_RHYTHM, taps, 0.5);
-            fb.innerHTML = `${rhythmTimeline(PRACTICE_RHYTHM, taps)}<div class="tmp-verdict">${rhythmVerdict(PRACTICE_RHYTHM, taps)} <span class="muted">(${pts.toLocaleString('sv-SE')} pts)</span></div>`;
-            c.querySelector('.tmp-count').textContent = 'Tap again to retry';
-          });
+      const arm = (msg) => {
+        again.hidden = true;
+        slot.innerHTML = tapCircle('go', 'Tap', `0 / ${n}`);
+        const c = slot.querySelector('.tmp-circle');
+        fb.textContent = msg;
+        collectTaps(c, n, c.querySelector('.tmp-count'), fb, (taps) => {
+          const pts = rhythmPoints(PRACTICE_RHYTHM, taps, 0.5);
+          fb.innerHTML = `${rhythmTimeline(PRACTICE_RHYTHM, taps)}<div class="tmp-verdict">${rhythmVerdict(PRACTICE_RHYTHM, taps)} <span class="muted">(${pts.toLocaleString('sv-SE')} pts)</span></div>`;
+          again.hidden = false; guard([again]);
         });
       };
+      const show = () => {
+        cancelDemo();
+        again.hidden = true;
+        slot.innerHTML = tapCircle('demo', 'Watch', null);
+        fb.textContent = 'Watch the rhythm…';
+        cancelDemo = playRhythm(slot.querySelector('.tmp-circle'), PRACTICE_RHYTHM, () => arm('Now tap it back. Your first tap starts it.'));
+      };
+      again.onclick = () => arm('Go again. Your first tap starts it.');
       el.querySelector('[data-a="show"]').onclick = show;
       el.querySelector('[data-a="ready"]').onclick = () => { stage = 'turn'; render(); };
       show();
@@ -255,21 +285,29 @@ export function createRhythm(el, { count, hint = '', words = null, done = false,
         <div class="tmp-step">2 · Your turn</div>
         ${what}
         ${tapCircle('go', 'Tap', `0 / ${count}`)}
-        <div class="tmp-feedback" aria-live="polite">Your first tap starts it, no rush.</div>
+        <div class="tmp-feedback" aria-live="polite">Your first tap starts it, no rush. You can try as many times as you like.</div>
+        <div class="tmp-row" data-r="decide" hidden><button type="button" class="btn ghost" data-a="again">↻ Try again</button><button type="button" class="btn" data-a="lock">Lock in ✓</button></div>
         <button type="button" class="btn ghost block" data-a="practice">← Practice again</button>
       </div>`;
-      const circle = el.querySelector('.tmp-circle');
+      const circle = el.querySelector('.tmp-circle'), fb = el.querySelector('.tmp-feedback');
+      const decide = el.querySelector('[data-r="decide"]');
       const lightUp = (k) => el.querySelectorAll('.tmp-words span').forEach((sp) => sp.classList.toggle('on', +sp.dataset.k < k));
-      collectTaps(circle, count, el.querySelector('.tmp-count'), el.querySelector('.tmp-feedback'), (taps) => {
-        onDone(taps); stage = 'done'; navigator.vibrate?.(30); render();
+      collectTaps(circle, count, el.querySelector('.tmp-count'), fb, (taps) => {
+        pending = taps;
+        fb.innerHTML = `${tapsStrip(taps)}<div class="tmp-verdict">Your take: <b>${(taps[taps.length - 1] / 1000).toFixed(1)} s</b>. Happy with it? Lock it in, or try again.</div>`;
+        decide.hidden = false;
+        el.querySelector('[data-a="practice"]').hidden = true;
+        guard([...decide.querySelectorAll('button')]);
       }, lightUp);
+      el.querySelector('[data-a="again"]').onclick = () => { pending = null; render(); };
+      el.querySelector('[data-a="lock"]').onclick = () => { if (!pending) return; onDone(pending); pending = null; stage = 'done'; render(); };
       el.querySelector('[data-a="practice"]').onclick = () => { stage = 'practice'; render(); };
       return;
     }
     el.innerHTML = `<div class="tmp">
       <div class="tmp-circle done" aria-hidden="true"><span class="tmp-label">✓</span></div>
-      <p class="tmp-text"><b>Got it!</b> You'll see how close you were with your points.</p>
-      <button type="button" class="btn ghost block" data-a="redo">Redo</button>
+      <p class="tmp-text"><b>Locked in!</b> You'll see how close you were with your points.</p>
+      <button type="button" class="btn ghost block" data-a="redo">Change my answer</button>
     </div>`;
     el.querySelector('[data-a="redo"]').onclick = () => { stage = 'turn'; render(); };
   }

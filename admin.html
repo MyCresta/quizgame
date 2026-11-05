@@ -59,6 +59,10 @@
   .tl-verdict { font-size: 14px; text-align: center; margin: 0; }
   label.check { display: flex; gap: 10px; align-items: center; font-size: 15px; }
   label.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.use-set { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.use-head { font-size: 14px; color: var(--muted); }
+.use-q { text-align: left; border: 0; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; cursor: pointer; font-size: 14px; }
+.use-q:hover { outline: 2px solid var(--accent); }
 </style>
 </head>
 <body>
@@ -281,6 +285,14 @@ function setupTry() {
   renderList();
 }
 
+const KIND_ICON = { number: '🔢', map: '📍', percent: '％', time: '⏱', color: '🎨', order: '↕', tempo: '🥁' };
+function usePicker() {
+  const sets = [...(data?.queue || []), ...(data?.backups || [])];
+  if (!sets.length) return '<p class="hint">No sets in the queue.</p>';
+  return sets.map((s) => `<div class="use-set"><div class="use-head"><b>${s.play_date ? 'Today' : s.is_backup ? 'Backup' : (s.expected_date ? fmtDate(s.expected_date, { weekday: 'short', day: 'numeric', month: 'short' }) : 'Queued')}</b> · ${esc(s.author)}</div>
+    ${s.questions.map((q, k) => `<button type="button" class="use-q" data-use="${s.id}:${k}">${KIND_ICON[q.kind] || '❓'} ${esc(q.prompt)}</button>`).join('')}</div>`).join('');
+}
+
 function openTry(t) {
   const area = $('tryArea');
   area.innerHTML = `<div class="card try-phone">
@@ -288,7 +300,20 @@ function openTry(t) {
     <div class="prompt">${esc(`Tap the rhythm of ${t.song}`)}</div>
     <div id="tryWidget"></div>
     <div id="tryResult"></div>
-  </div>`;
+  </div>
+  ${t.builtIn ? '' : `<div class="card"><h2>Put this song in the quiz</h2>
+    <p class="hint">Pick the question it should replace. You'll see the set in the editor first, then press Save.</p>
+    <div id="usePick">${usePicker()}</div></div>`}`;
+  area.querySelectorAll('[data-use]').forEach((b) => b.onclick = () => {
+    const [id, pos] = b.dataset.use.split(':').map(Number);
+    const set = findSet(id);
+    const questions = set.questions.map((q, k) => k !== pos ? q : {
+      kind: 'tempo', prompt: `Tap the rhythm of ${t.song}`, items: t.rhythm, label: t.words ? '' : t.hint,
+      words: t.words, tolerance: 0.5, fact: '', source_url: '', image_url: '',
+    });
+    openEditor({ ...set, questions });
+    toast('Song added to the set. Check it, then press Save.', true);
+  });
   createRhythm($('tryWidget'), {
     count: t.rhythm.length, hint: t.hint, words: t.words,
     onDone: (taps) => {
@@ -299,7 +324,7 @@ function openTry(t) {
         <div><span class="muted">Points</span><b class="pts">${fmtPts(pts)}</b></div>
       </div>
       <div class="tl">${rhythmTimeline(t.rhythm, taps)}<p class="tl-verdict">${rhythmVerdict(t.rhythm, taps)}</p></div>
-      <p class="hint" style="text-align:center">Press Redo to try again, or pick another song above.</p>`;
+      <p class="hint" style="text-align:center">Press "Change my answer" to try again, or pick another song above.</p>`;
     },
   });
   area.scrollIntoView({ behavior: 'smooth', block: 'start' });

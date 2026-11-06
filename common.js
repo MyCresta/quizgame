@@ -141,6 +141,8 @@ export function pageUrl(file) {
 export const KIND_TAG = {
   number: '', map: '<span class="tag map">📍 Map</span>', percent: '<span class="tag number">% Percent</span>',
   time: '<span class="tag map">⏱ Timer</span>', tempo: '<span class="tag map">🥁 Rhythm</span>', color: '<span class="tag number">🎨 Colour</span>', order: '<span class="tag map">↕ Sort</span>',
+  circle: '<span class="tag map">⭕ Draw</span>', country: '<span class="tag map">✏️ Draw</span>', glass: '<span class="tag number">🍸 Pour</span>',
+  jar: '<span class="tag number">🫘 Estimate</span>', centre: '<span class="tag map">🎯 Balance</span>', angle: '<span class="tag number">📐 Angle</span>', maze: '<span class="tag map">🟢 Tilt game</span>',
 };
 export const swatchHtml = (hex, cls = '') => `<span class="sw ${cls}" style="background:${esc(hex)}"></span>`;
 const secs = (n) => `${(Math.round(n * 100) / 100).toFixed(2)} s`;

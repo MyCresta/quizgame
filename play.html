@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="widgets.css">
+<link rel="stylesheet" href="lab.css">
 <style>
   body { font-size: 17px; min-height: 100dvh; }
   .app { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -76,6 +77,8 @@
 import { CONFIG } from './config.js';
 import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, rhythmTimeline, rhythmVerdict } from './common.js';
 import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js';
+import { LAB } from './lab.js';
+let labCleanup = null;   // stops a running challenge (the marble maze) when leaving the question
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -107,6 +110,7 @@ const doneKey = () => `bp_done_${today.date}_${name.toLowerCase()}`;
 const saveDraft = () => store.set(draftKey(), JSON.stringify(answers));
 
 function route() {
+  labCleanup?.(); labCleanup = null;
   renderWho();
   const qs = today.questions || [];
   if (!qs.length) return viewClosed();
@@ -179,6 +183,8 @@ async function viewDone(result) {
     const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';
     const tl = Array.isArray(p.ref) && Array.isArray(p.taps)
       ? `<div style="margin-top:6px">${rhythmTimeline(p.ref, p.taps)}<div class="muted" style="font-size:13px">${rhythmVerdict(p.ref, p.taps)} · orange = the real rhythm, green = your taps</div></div>` : '';
+    const lab = q && LAB[q.kind] && result.lab?.[q.id] ? `<div class="lab-w" style="margin-top:6px">${LAB[q.kind].reveal(q.meta, result.lab[q.id])}</div>` : '';
+    if (lab) return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${lab}</div>`;
     return `<div class="line" style="${tl ? 'display:grid' : ''}"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${tl}</div>`;
   }).join('');
   $('view').innerHTML = `<div class="card">
@@ -206,13 +212,20 @@ function answerText(q) {
     case 'tempo': return '🥁 Tapped ✓';
     case 'color': return `${swatchHtml(a.color)} Colour picked`;
     case 'order': return a.order.map((it, i) => `${i + 1}. ${esc(it)}`).join('&nbsp; ');
+    case 'jar': return `${fmt(a.lab.value)} beans`;
+    case 'maze': return `🟢 ${a.lab.holes.map((v) => fmt(v)).join(' + ')}`;
+    case 'circle': case 'country': return '✏️ Drawn ✓';
+    case 'glass': return '🍸 Poured ✓';
+    case 'centre': return '🎯 Placed ✓';
+    case 'angle': return '📐 Tilted ✓';
     default: return `${fmt(a.value)}${q.unit ? ` ${esc(q.unit)}` : ''}`;
   }
 }
 
-const NEED = { map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', tempo: 'Tap the rhythm, then press Lock in', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
+const NEED = { circle: 'Draw it first', country: 'Draw it first', glass: 'Pour the glass first', jar: 'Type your guess first', centre: 'Tap where it balances first', angle: 'Tilt it first', maze: 'Roll both marbles first', map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', tempo: 'Tap the rhythm, then press Lock in', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
 
 function viewQuestion(i) {
+  labCleanup?.(); labCleanup = null;
   const q = today.questions[i];
   const a = answers[q.id];
   const bodies = {
@@ -225,7 +238,7 @@ function viewQuestion(i) {
     number: `<div class="numwrap"><input id="num" inputmode="decimal" autocomplete="off" placeholder="Your guess" value="${a ? esc(String(a.raw ?? a.value)) : ''}">${q.unit ? `<span class="unit">${esc(q.unit)}</span>` : ''}</div>
        <div class="preview" id="preview"></div>`,
   };
-  const body = bodies[q.kind] || bodies.number;
+  const body = LAB[q.kind] ? `${a && q.kind !== 'maze' ? '<div class="muted" style="font-size:14px;text-align:center">Your answer is saved. Do it again to change it.</div>' : ''}<div id="w" class="lab-w"></div>` : bodies[q.kind] || bodies.number;
   $('view').innerHTML = `<div class="card">
     ${progress(i)}
     <div class="qnum">Question ${i + 1} of 3</div>
@@ -238,7 +251,13 @@ function viewQuestion(i) {
     </div>
   </div>`;
 
-  if (q.kind === 'map') {
+  if (LAB[q.kind]) {
+    if (q.kind === 'maze' && a) $('w').innerHTML = `<p class="lab-big">${a.lab.holes.map((v) => fmt(v)).join(' + ')}</p><p class="muted">Both marbles are done.</p>`;
+    else labCleanup = LAB[q.kind].setup($('w'), q.meta, (ans) => {
+      if (ans) answers[q.id] = { lab: ans }; else if (q.kind !== 'maze') delete answers[q.id];
+      saveDraft();
+    }) || null;
+  } else if (q.kind === 'map') {
     if (typeof L === 'undefined') { $('maphint').innerHTML = '<span class="error">The map failed to load. Check your connection and reload.</span>'; }
     else {
       const m = makeMap($(`map-${q.id}`), { tiles: 'plain', maxZoom: ANSWER_MAX_ZOOM });
@@ -317,9 +336,11 @@ function viewReview() {
         if (q.kind === 'color') return { question_id: q.id, color: a.color };
         if (q.kind === 'order') return { question_id: q.id, order: a.order };
         if (q.kind === 'tempo') return { question_id: q.id, taps: a.taps };
+        if (LAB[q.kind]) return { question_id: q.id, lab: a.lab };
         return { question_id: q.id, value: a.value };
       });
       const result = await rpc('quiz_submit_code', { p_player: name, p_answers: payload, p_code: joinCode });
+      result.lab = Object.fromEntries(qs.filter((q) => LAB[q.kind]).map((q) => [q.id, answers[q.id].lab]));   // to show how close you were
       store.set(doneKey(), JSON.stringify(result)); store.del(draftKey());
       viewDone(result);
     } catch (e) {
@@ -338,6 +359,9 @@ async function loadYesterday() {
     const me = res.players[idx];
     const lines = res.questions.map((q) => {
       const g = me.guesses.find((x) => x.question_id === q.id);
+      if (LAB[q.kind]) {
+        return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}${q.fact ? `<br><span class="muted" style="font-size:13px">${esc(q.fact)}</span>` : ''}</span><span class="pts">${fmtPts(g.points)}</span></div>${g.json && q.meta ? `<div class="lab-w">${LAB[q.kind].reveal(q.meta, g.json)}</div>` : ''}</div>`;
+      }
       if (q.kind === 'tempo') {
         const src = q.source_url ? ` · <a href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : '';
         return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}<br><span class="muted">${Array.isArray(g.json) && q.answer_items ? rhythmVerdict(q.answer_items, g.json) : ''}${src}</span></span><span class="pts">${fmtPts(g.points)}</span></div>${Array.isArray(g.json) && q.answer_items ? rhythmTimeline(q.answer_items, g.json) : ''}</div>`;

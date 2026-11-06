@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="lab.css">
 <style>
   /* Sized for a 16:9 screen: everything scales with the viewport. */
   html { font-size: min(1.05vw, 1.87vh); }
@@ -35,6 +36,10 @@
   .questions { display: grid; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 1rem; min-height: 0; }
   .q { background: var(--panel); border-radius: var(--radius); padding: 1.1rem 1.6rem; display: grid; grid-template-columns: 4.2rem 1fr; gap: 1.4rem; align-items: center; position: relative; overflow: hidden; min-height: 0; }
   .q.has-pic { padding-right: 17.5rem; }
+  .q .lab-pic { object-fit: contain; background: var(--panel-2); }
+  .q canvas.lab-pic { width: auto; aspect-ratio: 480 / 570; }
+  .r.kind-lab .ans .lab-pad { width: auto; height: 7.5rem; max-width: 100%; background: transparent; }
+  .r.kind-lab .ans .lab-big { font-size: inherit; }
   .q .pic { position: absolute; right: .9rem; top: .9rem; width: 15.5rem; height: calc(100% - 1.8rem); object-fit: cover; border-radius: 12px; background: var(--panel-2); }
   .q .n { font-size: 3.6rem; font-weight: 800; color: var(--accent); line-height: 1; text-align: center; }
   .q .prompt { min-width: 0; align-self: center; font-size: 1.95rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
@@ -238,6 +243,7 @@
 <script type="module">
 import { CONFIG } from './config.js';
 import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml, rhythmTimeline } from './common.js';
+import { LAB, labAnswer, labScreenPic, drawJar } from './lab.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -300,14 +306,17 @@ function renderQuestions(t) {
     return;
   }
   $('author').innerHTML = `Questions by <b>${esc(t.author)}</b>`;
-  $('questions').innerHTML = qs.map((q) => `
-    <div class="q ${q.image_url ? 'has-pic' : ''}">
+  $('questions').innerHTML = qs.map((q) => {
+    const labPic = !q.image_url && LAB[q.kind] && q.meta ? labScreenPic(q.kind, q.meta) : '';
+    return `
+    <div class="q ${q.image_url || labPic ? 'has-pic' : ''}">
       <div class="n">${q.position}</div>
       <div class="prompt">${esc(q.prompt)} ${q.kind === 'number'
           ? (q.unit ? `<span class="tag number">in ${esc(q.unit)}</span>` : '')
           : KIND_TAG[q.kind] || ''}${q.kind === 'order' && q.items ? `<div class="items">${q.items.map((it) => `<span>${esc(it)}</span>`).join('')}</div>` : ''}</div>
-      ${q.image_url ? `<img class="pic" src="${esc(q.image_url)}" alt="" onerror="this.remove();this.parentElement?.classList.remove('has-pic')">` : ''}
-    </div>`).join('');
+      ${q.image_url ? `<img class="pic" src="${esc(q.image_url)}" alt="" onerror="this.remove();this.parentElement?.classList.remove('has-pic')">` : labPic}
+    </div>`; }).join('');
+  qs.forEach((q, k) => { if (q.kind === 'jar' && q.meta && !q.image_url) { const c = $('questions').querySelectorAll('.q')[k]?.querySelector('canvas[data-jar]'); if (c) drawJar(c, q.meta); } });
 }
 
 // Shrink long question texts until they fit inside their card.
@@ -444,6 +453,16 @@ function renderResults(res) {
     }
     const who = b ? `Closest: <b>${esc(b.player)}</b>` : '';
     const g = b ? guessHtml(q, { guess: b.guess, lat: b.lat, lng: b.lng, json: b.json }) : '';
+    if (LAB[q.kind] && q.meta) {
+      const short = labAnswer(q.kind, q.meta);
+      const pic = b?.json && !short ? LAB[q.kind].reveal(q.meta, b.json).replace(/<p class="lab-legend">.*?<\/p>/s, '') : '';
+      return `<div class="r kind-${q.kind} kind-lab">
+        <div class="rq">${q.position}. ${esc(q.prompt)}</div>
+        <div class="ans num">${short ? esc(short) : pic}</div>
+        <div class="best">${b ? `${who} · ${fmtPts(b.points)}${pic ? ` <span class="muted" style="font-size:.85em">(blue = perfect, orange = ${esc(b.player)})</span>` : ''}` : ''}</div>
+        <div class="fact">${factLine(q)}</div>
+      </div>`;
+    }
     const best = !b ? '' : q.kind === 'order' ? `${who} · ${fmtPts(b.points)}`
       : q.kind === 'tempo' ? `${who} · ${fmtPts(b.points)} <span class="muted" style="font-size:.85em">(orange = real, green = ${esc(b.player)})</span>`
       : q.kind === 'color' ? `${who} ${g} · ${fmtPts(b.points)}`

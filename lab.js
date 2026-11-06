@@ -39,17 +39,28 @@ function normShape(p) {
   const [cx, cy] = polyCentroid(p), s = 1 / Math.sqrt(Math.abs(polyArea(p)) || 1);
   return p.map(([x, y]) => [(x - cx) * s, (y - cy) * s]);
 }
-function iou(a, b, n = 140) {
-  const all = a.concat(b);
-  const x0 = Math.min(...all.map((q) => q[0])), x1 = Math.max(...all.map((q) => q[0]));
-  const y0 = Math.min(...all.map((q) => q[1])), y1 = Math.max(...all.map((q) => q[1]));
-  const st = Math.max(x1 - x0, y1 - y0) / n;
+function rowSpans(p, y) {   // where a horizontal line crosses the polygon, as [from, to] pairs
+  const xs = [];
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > y) !== (p[j][1] > y)) xs.push(((p[j][0] - p[i][0]) * (y - p[i][1])) / (p[j][1] - p[i][1]) + p[i][0]);
+  xs.sort((u, v) => u - v);
+  const out = []; for (let k = 0; k + 1 < xs.length; k += 2) out.push([xs[k], xs[k + 1]]);
+  return out;
+}
+// Overlap (intersection over union) of two outlines, measured along 140 horizontal lines.
+export function iou(a, b, n = 140) {
+  const ys = a.concat(b).map((q) => q[1]), y0 = Math.min(...ys), st = (Math.max(...ys) - y0) / n;
   let both = 0, either = 0;
-  for (let y = y0 + st / 2; y < y1; y += st) for (let x = x0 + st / 2; x < x1; x += st) {
-    const ia = inside(a, x, y), ib = inside(b, x, y);
-    if (ia || ib) either++; if (ia && ib) both++;
+  for (let r = 0; r < n; r++) {
+    const y = y0 + (r + 0.5) * st, A = rowSpans(a, y), B = rowSpans(b, y);
+    let la = 0, lb = 0, li = 0;
+    A.forEach(([u, v]) => { la += v - u; }); B.forEach(([u, v]) => { lb += v - u; });
+    for (let i = 0, j = 0; i < A.length && j < B.length;) {
+      li += Math.max(0, Math.min(A[i][1], B[j][1]) - Math.max(A[i][0], B[j][0]));
+      if (A[i][1] < B[j][1]) i++; else j++;
+    }
+    both += li; either += la + lb - li;
   }
-  return either ? both / either : 0;
+  return either > 0 ? both / either : 0;
 }
 function resample(pts, n) {
   const d = [0];
@@ -81,8 +92,9 @@ function drawPad(el, onAnswer, { guide = '' } = {}) {
     if (!pts) return;
     const done = pts; pts = null;
     if (done.length < 8) { ink.setAttribute('d', ''); return; }
-    ink.setAttribute('d', pathD(done, true));
-    onAnswer({ pts: done.map((p) => [r2(p[0]), r2(p[1])]) });
+    const keep = done.length > 200 ? done.filter((_, k) => k % Math.ceil(done.length / 200) === 0 || k === done.length - 1) : done;
+    ink.setAttribute('d', pathD(keep, true));
+    onAnswer({ pts: keep.map((p) => [r2(p[0]), r2(p[1])]) });
   };
   svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
 }
@@ -106,6 +118,7 @@ function circleFit(pts) {
 }
 
 const circle = {
+  meta: (p) => ({ tol: p.tol }),
   title: '⭕ Perfect circle', prompt: () => 'Draw a perfect circle',
   params: [{ k: 'tol', label: 'Strictness (roundness error at which points fall off; lower = stricter)', def: 0.08, step: 0.01 }],
   setup(el, p, onAnswer) { drawPad(el, onAnswer); },
@@ -125,6 +138,7 @@ const circle = {
 
 // ---------- ✏️ Draw a country ----------
 const country = {
+  meta: (p) => ({ country: p.country, floor: p.floor, top: p.top, outline: COUNTRIES[p.country].pts }),
   title: '✏️ Draw a country', prompt: (p) => `Draw the outline of ${COUNTRIES[p.country].name}`,
   params: [
     { k: 'country', label: 'Country', def: 'sweden', options: Object.fromEntries(Object.entries(COUNTRIES).map(([k, v]) => [k, v.name])) },
@@ -177,6 +191,7 @@ function glassSvg(g, levels) {
     <path class="lab-glass" d="${sides}"/>${ov(GLASS.top, g.rt, 'lab-glass')}${stem}</svg>`;
 }
 const glass = {
+  meta: (p) => ({ glass: p.glass, target: p.target, tol: p.tol, rb: GLASSES[p.glass].rb, rt: GLASSES[p.glass].rt }),
   title: '🍸 Fill the glass', prompt: (p) => `Fill the glass so it holds exactly ${p.target === 50 ? 'half' : `${p.target} %`} of what it can`,
   params: [
     { k: 'glass', label: 'Glass', def: 'martini', options: Object.fromEntries(Object.entries(GLASSES).map(([k, v]) => [k, v.name])) },
@@ -269,6 +284,7 @@ export function drawJar(canvas, p) {
   return beans.length;
 }
 const jar = {
+  meta: (p) => ({ seed: p.seed, across: p.across, height: p.height, tol: p.tol, count: jarBeans(p).length }),
   title: '🫘 Beans in a jar', prompt: () => 'How many jelly beans are in the jar?',
   params: [
     { k: 'seed', label: 'Jar number (any number makes a new jar)', def: 7, step: 1 },
@@ -302,6 +318,7 @@ function shapeIn100(key) {   // scale the shape into the 100×100 view, centred
   return pts.map(([x, y]) => [ox + x * s, oy + y * s]);
 }
 const centre = {
+  meta: (p) => { const poly = shapeIn100(p.shape), [cx, cy] = polyCentroid(poly); return { shape: p.shape, tol: p.tol, cx: r2(cx), cy: r2(cy), size: 84 }; },
   title: '🎯 Centre of mass', prompt: (p) => `Tap the centre of mass of ${COUNTRIES[p.shape] ? COUNTRIES[p.shape].name : 'this shape'}`,
   params: [
     { k: 'shape', label: 'Shape', def: 'sweden', options: Object.fromEntries(Object.entries(SHAPES).map(([k, v]) => [k, v.name])) },
@@ -350,6 +367,7 @@ function angleSvg(look, from, deg, extra = '') {
   return `<svg class="lab-pad" viewBox="0 0 100 100">${ground}${extra}${body}</svg>`;
 }
 const angle = {
+  meta: (p) => ({ preset: p.preset, tol: p.tol, target: ANGLES[p.preset].target }),
   title: '📐 Match the angle', prompt: (p) => ANGLES[p.preset].prompt,
   params: [
     { k: 'preset', label: 'What', def: 'pisa', options: Object.fromEntries(Object.entries(ANGLES).map(([k, v]) => [k, v.name])) },
@@ -397,6 +415,7 @@ const MAZE_HOLES = [
 const MAZE_GOAL = [88, 138, 5000];
 export const MAZE_VALUES = [0, ...new Set(MAZE_HOLES.map((h) => h[2])), MAZE_GOAL[2]];
 const maze = {
+  meta: (p) => ({ speed: p.speed, values: MAZE_VALUES }),
   title: '🟢 Marble maze (tilt)', prompt: () => 'Tilt your phone to roll the marble as far as you can',
   params: [
     { k: 'speed', label: 'How strongly tilting pushes the marble', def: 1, step: 0.1 },
@@ -510,3 +529,19 @@ const maze = {
 };
 
 export const LAB = { circle, country, glass, jar, centre, angle, maze };
+
+// Short correct answer for the office screen (null = show the picture reveal instead).
+export function labAnswer(kind, m) {
+  if (kind === 'jar') return `${m.count ?? jarBeans(m).length} beans`;
+  if (kind === 'angle') return `${m.target ?? ANGLES[m.preset].target}°`;
+  if (kind === 'glass') return `${Math.round(levelFor({ rb: m.rb ?? GLASSES[m.glass].rb, rt: m.rt ?? GLASSES[m.glass].rt }, m.target / 100) * 100)} % up`;
+  if (kind === 'maze') return '5 000 + 5 000';
+  return null;
+}
+// Picture shown on the office screen next to today's question, so people can study it.
+export function labScreenPic(kind, m) {
+  if (kind === 'centre') return `<svg class="pic lab-pic" viewBox="0 0 100 100"><path class="lab-shape" d="${pathD(shapeIn100(m.shape), true)}"/></svg>`;
+  if (kind === 'glass') return glassSvg(GLASSES[m.glass], []).replace('class="lab-pad"', 'class="pic lab-pic"');
+  if (kind === 'jar') return '<canvas class="pic lab-pic" width="480" height="570" data-jar="1"></canvas>';
+  return '';
+}

@@ -1,6 +1,8 @@
 // The 3-question set editor, shared by the "add" page and the admin page.
 import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js';
 import { createColorPicker, hexToRgb, createRecorder, syllables } from './widgets.js';
+import { LAB } from './lab.js';
+export const LAB_KINDS = Object.entries(LAB).map(([k, c]) => [k, c.title]);
 
 export const SCORING = [
   { id: 'r1', label: 'Ballpark: 10× off scores 1 point', scoring: 'ratio', tol: 1 },
@@ -37,10 +39,10 @@ async function geocode(q) {
   return hit || null;
 }
 
-function block(uid, i) {
+function block(uid, i, kinds) {
   return `<div class="card" id="${uid}-q${i}">
     <h2><span class="n">${i + 1}</span> Question ${i + 1}</h2>
-    <div class="seg seg-kinds" data-f="kindseg">${KINDS.map(([k, l]) => `<button type="button" data-k="${k}">${l}</button>`).join('')}</div>
+    <div class="seg seg-kinds" data-f="kindseg">${kinds.map(([k, l]) => `<button type="button" data-k="${k}">${l}</button>`).join('')}</div>
     <label class="field"><span>Question</span><textarea class="input" data-f="prompt" maxlength="300"></textarea></label>
 
     <div data-part="number" style="display:grid;gap:14px">
@@ -107,6 +109,13 @@ function block(uid, i) {
       <div class="actions" style="display:flex;gap:8px"><button type="button" class="btn ghost" data-f="additem" style="padding:.6em 1em">＋ Item</button><button type="button" class="btn ghost" data-f="delitem" style="padding:.6em 1em">− Item</button></div>
     </div>
 
+    ${kinds.filter(([k]) => LAB[k]).map(([k]) => `<div data-part="${k}" class="hidden" style="display:grid;gap:12px">
+      ${LAB[k].params.map((x) => `<label class="field"><span>${esc(x.label)}</span>${x.options
+        ? `<select class="input" data-lp="${x.k}">${Object.entries(x.options).map(([v, n]) => `<option value="${v}"${v === x.def ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
+        : `<input class="input num" type="number" step="${x.step}" data-lp="${x.k}" value="${x.def}">`}</label>`).join('')}
+      <div class="hint">Try it first in Admin → Try it to tune these settings.</div>
+    </div>`).join('')}
+
     <details class="more" data-f="more">
       <summary>Optional: picture, fun fact and source</summary>
       <div>
@@ -120,9 +129,10 @@ function block(uid, i) {
   </div>`;
 }
 
-export function createSetEditor(root, { toast = alert, onChange = () => {} } = {}) {
+export function createSetEditor(root, { toast = alert, onChange = () => {}, lab = false } = {}) {
   const uid = `ed${Math.random().toString(36).slice(2, 7)}`;
-  root.innerHTML = [0, 1, 2].map((i) => block(uid, i)).join('');
+  const kinds = lab ? KINDS.concat(LAB_KINDS) : KINDS;
+  root.innerHTML = [0, 1, 2].map((i) => block(uid, i, kinds)).join('');
   const state = [0, 1, 2].map(() => ({ kind: 'number', lat: null, lng: null, map: null, marker: null, imageOk: true, picker: null, autoPrompt: '' }));
   const card = (i) => document.getElementById(`${uid}-q${i}`);
   const f = (i, name) => card(i).querySelector(`[data-f="${name}"]`);
@@ -215,12 +225,24 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     return state[i].map;
   }
 
+  // ---- new challenge types ----
+  function labParams(i) {
+    const k = state[i].kind, out = {};
+    part(i, k).querySelectorAll('[data-lp]').forEach((el) => { const x = LAB[k].params.find((q) => q.k === el.dataset.lp); out[x.k] = x.options ? el.value : +el.value; });
+    return out;
+  }
+  function updateLabPrompt(i) {   // keep an auto-written question text in sync with the settings
+    const p = f(i, 'prompt'), auto = LAB[state[i].kind].prompt(labParams(i));
+    if (!p.value.trim() || p.value === state[i].autoPrompt) { p.value = auto; state[i].autoPrompt = auto; }
+  }
+
   function setKind(i, kind) {
     state[i].kind = kind;
     f(i, 'kindseg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === kind));
-    KINDS.forEach(([k]) => part(i, k).classList.toggle('hidden', k !== kind));
-    const ph = PLACEHOLDERS[kind];
+    kinds.forEach(([k]) => part(i, k).classList.toggle('hidden', k !== kind));
+    const ph = PLACEHOLDERS[kind] || [''];
     f(i, 'prompt').placeholder = ph[i % ph.length];
+    if (LAB[kind]) updateLabPrompt(i);
     if (kind === 'map') ensureMap(i);
     if (kind === 'color' && !state[i].picker) {
       state[i].picker = createColorPicker(f(i, 'picker'), { onChange: (hex) => { setHex(i, hex, true); onChange(); } });
@@ -287,6 +309,7 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
     f(i, 'additem').onclick = () => { const v = itemInputs(i).map((x) => x.value); if (v.length < 6) setItems(i, [...v, '']); onChange(); };
     f(i, 'delitem').onclick = () => { const v = itemInputs(i).map((x) => x.value); if (v.length > 3) setItems(i, v.slice(0, -1)); onChange(); };
     ['prompt', 'label', 'fact', 'source'].forEach((n) => f(i, n).addEventListener('input', onChange));
+    card(i).querySelectorAll('[data-lp]').forEach((el) => el.addEventListener('input', () => { updateLabPrompt(i); onChange(); }));
     f(i, 'imgurl').addEventListener('input', () => checkImage(i));
     f(i, 'go').onclick = () => search(i);
     f(i, 'search').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(i); } };
@@ -326,6 +349,7 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
       if (imageUrl) extras.image_url = imageUrl;
       if (extras.source_url && !/^https?:\/\//i.test(extras.source_url)) throw new Error(`Question ${n}: the source should be a web link (https://…)`);
 
+      if (LAB[k]) return { kind: k, prompt, meta: LAB[k].meta(labParams(i)), ...extras };
       if (k === 'map') {
         if (state[i].lat === null) throw new Error(`Question ${n}: tap the map to set the correct spot`);
         return { kind: 'map', prompt, lat: state[i].lat, lng: state[i].lng, label: f(i, 'label').value.trim(), tolerance: +f(i, 'radius').value, ...extras };
@@ -418,6 +442,9 @@ export function createSetEditor(root, { toast = alert, onChange = () => {} } = {
         f(i, 'coltol').value = String(nearest(COLOR_TOL, q.tolerance));
       } else if (q.kind === 'order') {
         setItems(i, q.items || ['', '', '']);
+      } else if (LAB[q.kind] && q.meta) {
+        part(i, q.kind).querySelectorAll('[data-lp]').forEach((el) => { if (q.meta[el.dataset.lp] != null) el.value = q.meta[el.dataset.lp]; });
+        state[i].autoPrompt = LAB[q.kind].prompt(labParams(i));
       }
       f(i, 'imgurl').value = q.image_url || '';
       f(i, 'fact').value = q.fact || '';
@@ -457,7 +484,7 @@ export function renderPreview(el, qs, author, current = 0) {
       <div class="qn">Question ${current + 1} of 3</div>
       ${q.image_url ? `<img src="${esc(q.image_url)}" alt="">` : ''}
       <div class="p">${q.prompt ? esc(q.prompt) : '<span class="muted">Your question…</span>'}</div>
-      ${inputs[q.kind] || inputs.number}
+      ${inputs[q.kind] || (LAB[q.kind] ? `<div class="fake-input"><span>${esc(LAB[q.kind].title)}</span><span></span></div>` : inputs.number)}
       <div class="fake-btn">${current === 2 ? 'Review answers' : 'Next'}</div>
     </div>`;
   return el;

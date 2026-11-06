@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="forms.css">
 <link rel="stylesheet" href="widgets.css">
+<link rel="stylesheet" href="lab.css">
 <style>
   .app { max-width: 760px; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -65,38 +66,6 @@
 .use-q:hover { outline: 2px solid var(--accent); }
 .try-song.on { outline: 2px solid var(--accent); }
 .lab-card #labPlay { display: grid; gap: 10px; justify-items: center; margin: 8px 0 14px; }
-.lab-pad { width: 100%; max-width: 380px; aspect-ratio: 1; background: var(--panel-2); border-radius: 16px; touch-action: none; display: block; }
-.lab-stage { width: 100%; max-width: 380px; touch-action: none; }
-.lab-ink { fill: rgba(255,122,61,.08); stroke: var(--accent); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
-.lab-real { fill: none; stroke: #6cb8ff; stroke-width: 1; stroke-dasharray: 2.5 2; }
-.lab-real.fill { fill: rgba(108,184,255,.15); }
-.lab-hint { font-size: 14px; color: var(--muted); text-align: center; margin: 0; max-width: 360px; }
-.lab-legend { font-size: 13px; text-align: center; margin: 0; }
-.k-real { color: #6cb8ff; font-weight: 700; } .k-you { color: var(--accent); font-weight: 700; }
-.lab-glass { fill: none; stroke: #d6ecff; stroke-width: 1.3; stroke-linejoin: round; }
-.lab-water { fill: rgba(108,184,255,.42); }
-.lab-surface { fill: rgba(160,210,255,.55); stroke: rgba(200,230,255,.8); stroke-width: .4; }
-.lab-glass.back { stroke-opacity: .4; }
-ellipse.lab-level { fill: none; stroke: var(--accent); stroke-width: 1.1; }
-ellipse.lab-real { stroke-width: 1.1; }
-.lab-level { stroke: var(--accent); stroke-width: 1; }
-.lab-jar { width: 100%; max-width: 380px; height: auto; background: var(--panel-2); border-radius: 16px; }
-.lab-maze { width: 100%; max-width: 360px; height: auto; border-radius: 14px; touch-action: none; }
-.lab-num { font-size: 24px; text-align: center; }
-.lab-shape { fill: var(--mint); fill-opacity: .8; stroke: #062018; stroke-width: .4; fill-rule: evenodd; }
-.lab-mark { stroke: var(--accent); stroke-width: 1.2; fill: none; }
-.lab-mark circle { fill: var(--accent); stroke: #fff; stroke-width: .6; }
-.lab-mark.real { stroke: #6cb8ff; } .lab-mark.real circle { fill: #6cb8ff; }
-.lab-ground { stroke: var(--muted); stroke-width: 1; }
-.lab-ref { stroke: var(--line); stroke-width: .8; stroke-dasharray: 2 2; }
-.lab-tower { fill: #efe6d2; stroke: #8b8270; stroke-width: .5; }
-.lab-band { stroke: #b9ae95; stroke-width: .5; }
-.lab-road { stroke: #4b5063; stroke-width: 7; stroke-linecap: round; }
-.lab-road-mid { stroke: #fff; stroke-width: .6; stroke-dasharray: 3 3; }
-.lab-axis { stroke: var(--gold); stroke-width: 1.2; }
-.lab-earth { fill: #2a6fb0; stroke: #9fd0ff; stroke-width: .6; }
-.lab-ghost { fill: none; stroke: #6cb8ff; stroke-width: .8; stroke-dasharray: 2 1.6; }
-.lab-big { font-size: 34px; font-weight: 800; margin: 0; }
 .lab-points { text-align: center; font-size: 40px; font-weight: 800; color: var(--mint); }
 .lab-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 10px 0; }
 .lab-metrics div { background: var(--panel-2); border-radius: 12px; padding: 10px; display: grid; gap: 2px; text-align: center; font-size: 14px; }
@@ -141,7 +110,7 @@ import { CONFIG } from './config.js';
 import { rpc, fmt, fmtDate, esc, swatchHtml, fmtPts, store, rhythmPoints, rhythmVerdict, rhythmTimeline } from './common.js';
 import { createRhythm, createRecorder, PRACTICE_RHYTHM, PRACTICE_WORDS, syllables } from './widgets.js';
 import { createSetEditor } from './editor.js';
-import { LAB } from './lab.js';
+import { LAB, labAnswer } from './lab.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -187,6 +156,7 @@ async function load() {
 }
 
 function answerText(q) {
+  if (LAB[q.kind]) return `${LAB[q.kind].title}${q.meta ? ` · ${esc(labAnswer(q.kind, q.meta) || q.meta.country || q.meta.shape || '')}` : ''}`;
   switch (q.kind) {
     case 'map': return `📍 ${esc(q.label || `${q.lat?.toFixed(3)}, ${q.lng?.toFixed(3)}`)}`;
     case 'percent': return `${fmt(q.answer)} %`;
@@ -363,7 +333,7 @@ function setupTry() {
   renderList();
 }
 
-const KIND_ICON = { number: '🔢', map: '📍', percent: '％', time: '⏱', color: '🎨', order: '↕', tempo: '🥁' };
+const KIND_ICON = { number: '🔢', map: '📍', percent: '％', time: '⏱', color: '🎨', order: '↕', tempo: '🥁', circle: '⭕', country: '✏️', glass: '🍸', jar: '🫘', centre: '🎯', angle: '📐', maze: '🟢' };
 function usePicker() {
   const sets = [...(data?.queue || []), ...(data?.backups || [])];
   if (!sets.length) return '<p class="hint">No sets in the queue.</p>';
@@ -389,7 +359,19 @@ function openLab(kind) {
         ? `<select class="input" data-k="${x.k}">${Object.entries(x.options).map(([v, n]) => `<option value="${v}"${v === p[x.k] ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
         : `<input class="input" type="number" step="${x.step}" data-k="${x.k}" value="${p[x.k]}">`}</label>`).join('')}
       <button type="button" class="btn ghost" id="labApply">Apply and play again</button>
-    </details></div>`;
+    </details></div>
+    <div class="card"><h2>Put this challenge in the quiz</h2>
+      <p class="hint">Uses the settings above. Pick the question it should replace; you'll see the set in the editor first, then press Save. The replaced question is kept as a spare.</p>
+      <div id="labUse">${usePicker()}</div></div>`;
+  area.querySelectorAll('#labUse [data-use]').forEach((btn) => btn.onclick = () => {
+    const [id, pos] = btn.dataset.use.split(':').map(Number);
+    const set = findSet(id);
+    const q = { kind, prompt: c.prompt(p), meta: c.meta(p), fact: '', source_url: '', image_url: '' };
+    const questions = set.questions.map((x, k) => (k === pos ? q : x));
+    openEditor({ ...set, questions });
+    editing.replaced = { question: set.questions[pos], note: `replaced by ${c.title} in ${set.author}'s set` };
+    toast('Challenge added to the set. Check it, then press Save.', true);
+  });
   let answer = null;
   cleanup?.(); cleanup = null;
   const play = () => {
@@ -512,7 +494,7 @@ function openEditor(set, backup, preload = null) {
   $('editAuthor').value = set?.author ?? (backup ? 'Quizbot' : '');
   $('editBackup').checked = set ? !!set.is_backup : !!backup;
   $('editBackup').disabled = !!set?.play_date;
-  editor = createSetEditor($('editor'), { toast });
+  editor = createSetEditor($('editor'), { toast, lab: true });
   if (set) editor.load(set.questions);
   else if (preload) editor.load(preload);
 }

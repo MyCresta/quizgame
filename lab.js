@@ -160,15 +160,21 @@ function volFrac(g, h) {   // h: 0..1 of the height -> share of the volume below
   return v(h) / v(1);
 }
 function levelFor(g, target) { let lo = 0, hi = 1; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (volFrac(g, m) < target) lo = m; else hi = m; } return (lo + hi) / 2; }
+// Drawn as a 3D glass (oval rim and water surface) so you judge volume, not the flat area of a triangle.
+const ELL = 0.22;   // how flat the ovals are
 function glassSvg(g, levels) {
-  const H = GLASS.bottom - GLASS.top, yAt = (h) => GLASS.bottom - h * H, rAt = (h) => g.rb + (g.rt - g.rb) * h;
-  const outline = `M${GLASS.x - g.rt},${GLASS.top} L${GLASS.x - g.rb},${GLASS.bottom} L${GLASS.x + g.rb},${GLASS.bottom} L${GLASS.x + g.rt},${GLASS.top}`;
-  const stem = g.rb === 0 ? `<path class="lab-glass" d="M50,${GLASS.bottom} V96 M38,96 H62"/>` : '';
-  const fill = (h, cls) => { const y = yAt(h), r = rAt(h);
-    return `<path class="${cls}" d="M${GLASS.x - r},${y} L${GLASS.x - g.rb},${GLASS.bottom} L${GLASS.x + g.rb},${GLASS.bottom} L${GLASS.x + r},${y}Z"/>`; };
-  const line = (h, cls) => { const y = yAt(h), r = rAt(h); return `<line class="${cls}" x1="${GLASS.x - r - 6}" x2="${GLASS.x + r + 6}" y1="${y}" y2="${y}"/>`; };
-  return `<svg class="lab-pad" viewBox="0 0 100 100">${levels.map((l) => (l.fill ? fill(l.h, 'lab-water') : '') + (l.line ? line(l.h, l.line) : '')).join('')}
-    <path class="lab-glass" d="${outline}"/>${stem}</svg>`;
+  const H = GLASS.bottom - GLASS.top, X = GLASS.x, yAt = (h) => GLASS.bottom - h * H, rAt = (h) => g.rb + (g.rt - g.rb) * h;
+  const ov = (y, r, cls, extra = '') => `<ellipse class="${cls}" cx="${X}" cy="${r2(y)}" rx="${r2(r)}" ry="${r2(r * ELL)}"${extra}/>`;
+  const bottomArc = g.rb > 0 ? `A${g.rb},${r2(g.rb * ELL)} 0 0 0 ${X + g.rb},${GLASS.bottom}` : '';
+  const body = (h) => { const y = r2(yAt(h)), r = r2(rAt(h));
+    return `M${X - r},${y} L${X - g.rb},${GLASS.bottom} ${bottomArc} L${X + r},${y} A${r},${r2(r * ELL)} 0 0 1 ${X - r},${y}Z`; };
+  const water = (h) => h <= 0.002 ? '' : `<path class="lab-water" d="${body(h)}"/>${ov(yAt(h), rAt(h), 'lab-surface')}`;
+  const ring = (h, cls) => ov(yAt(h), rAt(h), cls);
+  const sides = `M${X - g.rt},${GLASS.top} L${X - g.rb},${GLASS.bottom} ${bottomArc} L${X + g.rt},${GLASS.top}`;
+  const base = g.rb > 0 ? `<path class="lab-glass back" d="M${X - g.rb},${GLASS.bottom} A${g.rb},${r2(g.rb * ELL)} 0 0 1 ${X + g.rb},${GLASS.bottom}"/>` : '';
+  const stem = g.rb === 0 ? `<path class="lab-glass" d="M${X},${GLASS.bottom} V95"/>${ov(95.5, 12, 'lab-glass')}` : '';
+  return `<svg class="lab-pad" viewBox="0 0 100 100">${base}${levels.map((l) => (l.fill ? water(l.h) : '') + (l.line ? ring(l.h, l.line) : '')).join('')}
+    <path class="lab-glass" d="${sides}"/>${ov(GLASS.top, g.rt, 'lab-glass')}${stem}</svg>`;
 }
 const glass = {
   title: '🍸 Fill the glass', prompt: (p) => `Fill the glass so it holds exactly ${p.target === 50 ? 'half' : `${p.target} %`} of what it can`,
@@ -193,7 +199,7 @@ const glass = {
   },
   score(p, a) {
     const g = GLASSES[p.glass], v = 100 * volFrac(g, a.level), err = Math.abs(v - p.target);
-    return { points: pts10k(curve(err, p.tol)), metrics: { 'You filled': `${v.toFixed(1)} % of the volume`, 'Your level': `${Math.round(a.level * 100)} % of the height`, 'Right level': `${Math.round(levelFor(g, p.target / 100) * 100)} % of the height` } };
+    return { points: pts10k(curve(err, p.tol)), metrics: { 'You filled': `${v.toFixed(1)} % of the volume`, 'Your level': `${Math.round(a.level * 100)} % of the height`, 'Right level': `${Math.round(levelFor(g, p.target / 100) * 100)} % of the height`, ...(p.glass === 'martini' ? { note: 'A cone gets wider as it goes up, so its volume grows with the height cubed: half the height holds only 12.5 %, and half the volume sits at 79 % of the height.' } : {}) } };
   },
   reveal(p, a) {
     const g = GLASSES[p.glass], right = levelFor(g, p.target / 100);
@@ -203,42 +209,58 @@ const glass = {
 };
 
 // ---------- 🫘 Bean jar ----------
+// Beans are poured in one at a time: each tries a few random spots and settles at the lowest one
+// (resting on the floor or on beans below), like real pouring. Same jar number = same jar every time.
 function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+const jarCache = new Map();
+let JAR_TRIES = 80;
+export const _setTries = (n) => { JAR_TRIES = n; jarCache.clear(); };
 export function jarBeans(p) {
-  const rand = rng(p.seed), R = p.across / 2 - 0.5, beans = [];
-  const dz = 0.82, rows = Math.sqrt(3) / 2;
-  for (let L = 0; L < p.layers; L++) {
-    const ox = L % 2 ? 0.5 : 0, oy = L % 2 ? rows / 3 : 0;
-    const top = L === p.layers - 1;
-    for (let j = -Math.ceil(R / rows) - 1; j <= Math.ceil(R / rows) + 1; j++) for (let i = -Math.ceil(R) - 1; i <= Math.ceil(R) + 1; i++) {
-      const x = i + (j % 2 ? 0.5 : 0) + ox, y = j * rows + oy;
-      if (x * x + y * y > R * R) continue;
-      if (top && rand() > p.topFill) continue;   // the top layer is only partly full
-      beans.push({ x: x + (rand() - 0.5) * 0.14, y: y + (rand() - 0.5) * 0.14, z: L * dz + 0.5 + (top ? (rand() - 0.5) * 0.2 : 0), rot: rand() * Math.PI, c: Math.floor(rand() * 7) });
+  const key = `${p.seed}|${p.across}|${p.height}`;
+  if (jarCache.has(key)) return jarCache.get(key);
+  const rand = rng(p.seed * 7919 + 13), R = p.across / 2 - 0.5, beans = [], grid = new Map();
+  const cell = (x, y) => `${Math.floor(x)},${Math.floor(y)}`;
+  const near = (x, y) => { const out = []; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const g = grid.get(cell(x + i, y + j)); if (g) out.push(...g); } return out; };
+  let misses = 0;
+  while (misses < 60 && beans.length < 5000) {
+    let best = null;
+    for (let k = 0; k < JAR_TRIES; k++) {
+      const ang = rand() * 2 * Math.PI, rr = R * Math.sqrt(rand()), x = rr * Math.cos(ang), y = rr * Math.sin(ang);
+      let z = 0.5;
+      for (const o of near(x, y)) { const d2 = (o.x - x) ** 2 + (o.y - y) ** 2; if (d2 < 1) z = Math.max(z, o.z + Math.sqrt(1 - d2)); }
+      if (!best || z < best.z) best = { x, y, z };
     }
+    if (best.z > p.height - 0.5) { misses++; continue; }
+    misses = 0;
+    const b = { ...best, rot: rand() * Math.PI, end: rand() < 0.25, size: 0.92 + rand() * 0.16, c: Math.floor(rand() * 7) };
+    beans.push(b);
+    const c = cell(b.x, b.y); if (!grid.has(c)) grid.set(c, []); grid.get(c).push(b);
   }
+  jarCache.set(key, beans);
   return beans;
 }
-const BEAN_COLOURS = [['#e63946', '#7a1018'], ['#f4a261', '#8a4a12'], ['#ffd166', '#8c6a00'], ['#06d6a0', '#03664b'], ['#9b5de5', '#4b2380'], ['#f15bb5', '#7a1d55'], ['#f8f4e3', '#9b9070']];
+// The quick estimate you can do in your head: beans across × beans across × beans up × 0.6
+// (a cylinder is about 80 % of the square box around it, and loose beans fill about 75 % of the space).
+export const jarRule = (p) => Math.round(p.across * p.across * p.height * 0.6);
+const BEAN_COLOURS = [['#e63946', '#7a1018'], ['#f4a261', '#8a4a12'], ['#ffd166', '#8c6a00'], ['#06d6a0', '#03664b'], ['#9b5de5', '#4b2380'], ['#f15bb5', '#7a1d55'], ['#f8f4e3', '#9b9070'], ['#222', '#000']];
 export function drawJar(canvas, p) {
   const beans = jarBeans(p), ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height, tilt = 0.32, ct = Math.cos(tilt), stl = Math.sin(tilt);
-  const R = p.across / 2, Hj = p.layers * 0.82 + 1.2;
-  const s = Math.min((W * 0.86) / (2 * R), (H * 0.86) / (Hj * ct + 2 * R * stl));
+  const W = canvas.width, H = canvas.height, tilt = 0.3, ct = Math.cos(tilt), stl = Math.sin(tilt);
+  const R = p.across / 2, Hj = p.height + 1.2;
+  const s = Math.min((W * 0.86) / (2 * R), (H * 0.88) / (Hj * ct + 2 * R * stl));
   const cx = W / 2, by = H - (H - (Hj * ct + 2 * R * stl) * s) / 2 - R * stl * s;
   const X = (x) => cx + x * s, Y = (y, z) => by - z * ct * s - y * stl * s;
   ctx.clearRect(0, 0, W, H);
-  // back of the jar
   ctx.fillStyle = 'rgba(180,220,255,0.06)'; ctx.strokeStyle = 'rgba(200,230,255,0.35)'; ctx.lineWidth = Math.max(1.5, s * 0.06);
   ctx.beginPath(); ctx.ellipse(cx, Y(0, 0), R * s, R * stl * s, 0, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
-  beans.sort((a, b) => (-a.y * ct + a.z * stl) - (-b.y * ct + b.z * stl));
-  for (const b of beans) {
-    const [c1, c2] = BEAN_COLOURS[b.c], x = X(b.x), y = Y(b.y, b.z), rx = 0.56 * s, ry = 0.4 * s;
-    const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.45, ry * 0.1, x, y, rx * 1.1);
-    g.addColorStop(0, '#fff'); g.addColorStop(0.18, c1); g.addColorStop(1, c2);
+  const order = beans.slice().sort((a, b) => (-a.y * ct + a.z * stl) - (-b.y * ct + b.z * stl));
+  for (const b of order) {
+    const [c1, c2] = BEAN_COLOURS[b.c], x = X(b.x), y = Y(b.y, b.z);
+    const rx = (b.end ? 0.44 : 0.6) * s * b.size, ry = 0.4 * s * b.size;
+    const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.45, ry * 0.1, x, y, rx * 1.15);
+    g.addColorStop(0, '#fff'); g.addColorStop(0.2, c1); g.addColorStop(1, c2);
     ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, b.rot, 0, 2 * Math.PI); ctx.fill();
   }
-  // glass walls, rim and shine in front
   ctx.strokeStyle = 'rgba(210,235,255,0.55)';
   ctx.beginPath(); ctx.moveTo(X(-R), Y(0, 0)); ctx.lineTo(X(-R), Y(0, Hj)); ctx.moveTo(X(R), Y(0, 0)); ctx.lineTo(X(R), Y(0, Hj)); ctx.stroke();
   ctx.beginPath(); ctx.ellipse(cx, Y(0, 0), R * s, R * stl * s, 0, 0, Math.PI); ctx.stroke();
@@ -250,9 +272,8 @@ const jar = {
   title: '🫘 Beans in a jar', prompt: () => 'How many jelly beans are in the jar?',
   params: [
     { k: 'seed', label: 'Jar number (any number makes a new jar)', def: 7, step: 1 },
-    { k: 'across', label: 'Beans across', def: 9, step: 1 },
-    { k: 'layers', label: 'Layers', def: 12, step: 1 },
-    { k: 'topFill', label: 'How full the top layer is (0–1)', def: 0.5, step: 0.1 },
+    { k: 'across', label: 'Jar width (in beans)', def: 9, step: 1 },
+    { k: 'height', label: 'Filled height (in beans)', def: 11, step: 1 },
     { k: 'tol', label: 'Ratio error that gives 0 points (0.3 = off by 2×)', def: 0.3, step: 0.05 },
   ],
   setup(el, p, onAnswer) {
@@ -262,11 +283,15 @@ const jar = {
     const inp = el.querySelector('input');
     inp.addEventListener('input', () => { const v = Math.round(+inp.value); onAnswer(v > 0 ? { value: v } : null); });
   },
+  answerTarget: (p) => jarBeans(p).length,
   score(p, a) {
-    const n = jarBeans(p).length, err = Math.abs(Math.log10(a.value / n));
+    const n = p.count ?? jarBeans(p).length, err = Math.abs(Math.log10(a.value / n));
     return { points: pts10k(curve(err, p.tol)), metrics: { 'Beans in the jar': n, 'Your guess': a.value, 'Off by': `${Math.round(Math.abs(a.value / n - 1) * 100)} %` } };
   },
-  reveal(p) { return `<p class="lab-big">${jarBeans(p).length} beans</p><p class="lab-legend">${p.layers} layers of about ${Math.round(jarBeans({ ...p, layers: 1, topFill: 1 }).length)} beans, the top one partly full.</p>`; },
+  reveal(p) {
+    const n = p.count ?? jarBeans(p).length;
+    return `<p class="lab-big">${n} beans</p><p class="lab-legend">Quick estimate: ${p.across} across × ${p.across} × ${p.height} up × 0.6 ≈ <b>${jarRule(p)}</b></p>`;
+  },
 };
 
 // ---------- 🎯 Centre of mass ----------

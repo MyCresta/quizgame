@@ -81,6 +81,7 @@ ellipse.lab-level { fill: none; stroke: var(--accent); stroke-width: 1.1; }
 ellipse.lab-real { stroke-width: 1.1; }
 .lab-level { stroke: var(--accent); stroke-width: 1; }
 .lab-jar { width: 100%; max-width: 380px; height: auto; background: var(--panel-2); border-radius: 16px; }
+.lab-maze { width: 100%; max-width: 360px; height: auto; border-radius: 14px; touch-action: none; }
 .lab-num { font-size: 24px; text-align: center; }
 .lab-shape { fill: var(--mint); fill-opacity: .8; stroke: #062018; stroke-width: .4; fill-rule: evenodd; }
 .lab-mark { stroke: var(--accent); stroke-width: 1.2; fill: none; }
@@ -372,6 +373,7 @@ function usePicker() {
 
 // ---------- New challenge types (lab) ----------
 const labParams = {};
+let cleanup = null;   // stops a running challenge (e.g. the marble maze's animation)
 function openLab(kind) {
   const c = LAB[kind];
   const p = labParams[kind] ||= Object.fromEntries(c.params.map((x) => [x.k, x.def]));
@@ -389,14 +391,17 @@ function openLab(kind) {
       <button type="button" class="btn ghost" id="labApply">Apply and play again</button>
     </details></div>`;
   let answer = null;
+  cleanup?.(); cleanup = null;
   const play = () => {
+    cleanup?.(); cleanup = null;
     answer = null; $('labLock').disabled = true; $('labResult').innerHTML = ''; $('labBtns').style.display = '';
     $('labPrompt').textContent = c.prompt(p);
-    c.setup($('labPlay'), p, (a) => { answer = a; $('labLock').disabled = !a; });
+    cleanup = c.setup($('labPlay'), p, (a) => { answer = a; $('labLock').disabled = !a; }) || null;
   };
   $('labRedo').onclick = play;
   $('labLock').onclick = () => {
     if (!answer) return;
+    cleanup?.(); cleanup = null;
     const r = c.score(p, answer);
     const { note, ...m } = r.metrics;
     $('labPlay').innerHTML = c.reveal(p, answer);

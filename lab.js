@@ -382,4 +382,131 @@ const angle = {
   },
 };
 
-export const LAB = { circle, country, glass, jar, centre, angle };
+// ---------- 🟢 Marble maze (tilt the phone) ----------
+// Two marbles, one after the other. Every hole has a value: early holes are cheap, the deeper you get
+// the more they're worth, and the goal at the very end is worth 5 000. A marble scores the hole it falls in.
+const MZ = { w: 100, h: 150, ball: 3, hole: 4.6, goal: 6, time: 60 };
+const MAZE_WALLS = [[0, 32, 76, 32], [24, 62, 100, 62], [0, 92, 76, 92], [24, 122, 100, 122]];
+const MAZE_HOLES = [
+  [36, 22, 250], [60, 10, 250],
+  [66, 52, 750], [46, 40, 750], [28, 52, 750],
+  [32, 74, 1500], [52, 84, 1500], [72, 72, 1500],
+  [76, 112, 2500], [56, 100, 2500], [36, 112, 2500],
+  [40, 142, 3500], [60, 130, 3500], [70, 144, 3500],
+];
+const MAZE_GOAL = [88, 138, 5000];
+export const MAZE_VALUES = [0, ...new Set(MAZE_HOLES.map((h) => h[2])), MAZE_GOAL[2]];
+const maze = {
+  title: '🟢 Marble maze (tilt)', prompt: () => 'Tilt your phone to roll the marble as far as you can',
+  params: [
+    { k: 'speed', label: 'How strongly tilting pushes the marble', def: 1, step: 0.1 },
+  ],
+  setup(el, p, onAnswer) {
+    el.innerHTML = `<canvas class="lab-maze" width="400" height="600"></canvas>
+      <p class="lab-hint" id="mzMsg">Hold the phone flat-ish in front of you, then press Start. Tilt to roll. Two marbles, the best holes are at the end.</p>
+      <button type="button" class="btn block" id="mzGo">Start marble 1</button>`;
+    const cv = el.querySelector('canvas'), ctx = cv.getContext('2d'), msg = el.querySelector('#mzMsg'), go = el.querySelector('#mzGo');
+    const S = cv.width / MZ.w;
+    const results = [];
+    let ball = null, tilt = { x: 0, y: 0 }, base = null, sensor = false, pointer = null, raf = 0, last = 0, t0 = 0, keys = {};
+    const onOri = (e) => {
+      if (e.gamma == null) return;
+      sensor = true;
+      if (base == null) base = e.beta;
+      tilt = { x: Math.max(-1, Math.min(1, e.gamma / 25)), y: Math.max(-1, Math.min(1, (e.beta - base) / 25)) };
+    };
+    const onKey = (e) => { keys[e.key] = e.type === 'keydown'; };
+    window.addEventListener('deviceorientation', onOri);
+    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
+    const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * MZ.w, (e.clientY - r.top) / r.height * MZ.h]; };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); cv.setPointerCapture(e.pointerId); pointer = pos(e); });
+    cv.addEventListener('pointermove', (e) => { if (pointer) pointer = pos(e); });
+    cv.addEventListener('pointerup', () => { pointer = null; });
+
+    function draw() {
+      ctx.setTransform(S, 0, 0, S, 0, 0);
+      ctx.fillStyle = '#2a2f3f'; ctx.fillRect(0, 0, MZ.w, MZ.h);
+      ctx.strokeStyle = '#c9b48a'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+      for (const [x1, y1, x2, y2] of MAZE_WALLS) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+      ctx.font = 'bold 3.2px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const [x, y, v] of MAZE_HOLES) { ctx.fillStyle = '#0b0d12'; ctx.beginPath(); ctx.arc(x, y, MZ.hole, 0, 7); ctx.fill(); ctx.fillStyle = '#9aa0b4'; ctx.fillText(v >= 1000 ? `${v / 1000}k` : v, x, y); }
+      ctx.fillStyle = '#5ee0b1'; ctx.beginPath(); ctx.arc(MAZE_GOAL[0], MAZE_GOAL[1], MZ.goal, 0, 7); ctx.fill();
+      ctx.fillStyle = '#062018'; ctx.font = 'bold 3.6px system-ui'; ctx.fillText('5k', MAZE_GOAL[0], MAZE_GOAL[1]);
+      ctx.fillStyle = '#9aa0b4'; ctx.font = 'bold 3px system-ui'; ctx.fillText('START', 12, 4);
+      if (ball) {
+        const r = Math.max(0.3, MZ.ball * (ball.fall ?? 1));
+        const g = ctx.createRadialGradient(ball.x - r / 3, ball.y - r / 3, r / 6, ball.x, ball.y, r);
+        g.addColorStop(0, '#fff'); g.addColorStop(1, '#ff7a3d');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ball.x, ball.y, r, 0, 7); ctx.fill();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (ball && !ball.fall) { ctx.fillStyle = '#f5efe4'; ctx.font = 'bold 22px system-ui'; ctx.textAlign = 'right'; ctx.fillText(`${Math.max(0, Math.ceil(MZ.time - (last - t0) / 1000))} s`, cv.width - 10, 20); }
+    }
+    function collide() {
+      const segs = MAZE_WALLS.concat([[0, 0, MZ.w, 0], [MZ.w, 0, MZ.w, MZ.h], [MZ.w, MZ.h, 0, MZ.h], [0, MZ.h, 0, 0]]);
+      for (const [x1, y1, x2, y2] of segs) {
+        const dx = x2 - x1, dy = y2 - y1, t = Math.max(0, Math.min(1, ((ball.x - x1) * dx + (ball.y - y1) * dy) / (dx * dx + dy * dy)));
+        const cx = x1 + t * dx, cy = y1 + t * dy, ex = ball.x - cx, ey = ball.y - cy, d = Math.hypot(ex, ey), min = MZ.ball + 1.1;
+        if (d < min && d > 1e-6) {
+          const nx = ex / d, ny = ey / d;
+          ball.x = cx + nx * min; ball.y = cy + ny * min;
+          const vn = ball.vx * nx + ball.vy * ny;
+          if (vn < 0) { ball.vx -= 1.35 * vn * nx; ball.vy -= 1.35 * vn * ny; }
+        }
+      }
+    }
+    function end(value) {
+      ball.fall = 1;
+      const shrink = () => { ball.fall -= 0.08; draw(); if (ball.fall > 0) raf = requestAnimationFrame(shrink); else finish(value); };
+      shrink();
+    }
+    function finish(value) {
+      results.push(value);
+      ball = null; draw();
+      navigator.vibrate?.(60);
+      if (results.length < 2) {
+        msg.textContent = `Marble 1: ${value.toLocaleString('sv-SE')} points. Ready for marble 2?`;
+        go.textContent = 'Start marble 2'; go.hidden = false;
+      } else {
+        msg.textContent = `Marble 1: ${results[0].toLocaleString('sv-SE')} · Marble 2: ${results[1].toLocaleString('sv-SE')}`;
+        onAnswer({ holes: results.slice() });
+      }
+    }
+    function step(now) {
+      const dt = Math.min(0.04, (now - last) / 1000); last = now;
+      let ax = tilt.x, ay = tilt.y;
+      if (!sensor) {
+        ax = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0); ay = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
+        if (pointer) { ax = Math.max(-1, Math.min(1, (pointer[0] - ball.x) / 25)); ay = Math.max(-1, Math.min(1, (pointer[1] - ball.y) / 25)); }
+      }
+      const A = 150 * p.speed;
+      ball.vx = (ball.vx + ax * A * dt) * (1 - 0.9 * dt); ball.vy = (ball.vy + ay * A * dt) * (1 - 0.9 * dt);
+      const sp = Math.hypot(ball.vx, ball.vy); if (sp > 80) { ball.vx *= 80 / sp; ball.vy *= 80 / sp; }
+      const n = Math.ceil(sp * dt / 1.5) || 1;
+      for (let i = 0; i < n; i++) { ball.x += ball.vx * dt / n; ball.y += ball.vy * dt / n; collide(); }
+      if (Math.hypot(ball.x - MAZE_GOAL[0], ball.y - MAZE_GOAL[1]) < MZ.goal - 1) return end(MAZE_GOAL[2]);
+      for (const [x, y, v] of MAZE_HOLES) if (Math.hypot(ball.x - x, ball.y - y) < MZ.hole - 1.2) return end(v);
+      if ((now - t0) / 1000 > MZ.time) { msg.textContent = 'Time’s up!'; return end(0); }
+      draw();
+      raf = requestAnimationFrame(step);
+    }
+    go.onclick = async () => {
+      try { if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch { /* fall back to touch */ }
+      base = null; go.hidden = true;
+      msg.textContent = 'Tilt to roll!';
+      ball = { x: 12, y: 12, vx: 0, vy: 0 };
+      last = t0 = performance.now();
+      raf = requestAnimationFrame(step);
+      setTimeout(() => { if (!sensor && ball) msg.textContent = 'No tilt sensor found: hold your finger (or the mouse) where you want the marble to roll.'; }, 1200);
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('deviceorientation', onOri); window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); };
+  },
+  score(p, a) {
+    const ok = a.holes.every((v) => MAZE_VALUES.includes(v));
+    return { points: ok ? Math.max(1, a.holes[0] + a.holes[1]) : 1, metrics: { 'Marble 1': a.holes[0].toLocaleString('sv-SE'), 'Marble 2': a.holes[1].toLocaleString('sv-SE') } };
+  },
+  reveal(p, a) { return `<p class="lab-big">${a.holes.map((v) => v.toLocaleString('sv-SE')).join(' + ')}</p><p class="lab-legend">The goal at the end is worth 5 000 per marble.</p>`; },
+};
+
+export const LAB = { circle, country, glass, jar, centre, angle, maze };

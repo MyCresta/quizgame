@@ -49,3 +49,8 @@ Admin page: `admin.html`. Change the password under Settings after the first log
 
 **One-time setup:** run `supabase/one_time_cleanup.sql` once in Supabase → SQL Editor. It enables the two delete
 buttons on the admin page (delete set, remove a player's answers) and removes leftovers from earlier experiments.
+
+## Challenge lab (testing)
+Admin → Try it → "New challenge types" has playable test versions of: perfect circle, draw a country,
+fill the glass, beans in a jar, centre of mass and match the angle (`lab.js`, outlines in `shapes.js`
+from Natural Earth 1:50m, public domain). Each has a Settings panel to tune scoring. Not in the quiz yet.

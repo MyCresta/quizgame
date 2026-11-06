@@ -63,6 +63,41 @@
 .use-head { font-size: 14px; color: var(--muted); }
 .use-q { text-align: left; border: 0; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; cursor: pointer; font-size: 14px; }
 .use-q:hover { outline: 2px solid var(--accent); }
+.try-song.on { outline: 2px solid var(--accent); }
+.lab-card #labPlay { display: grid; gap: 10px; justify-items: center; margin: 8px 0 14px; }
+.lab-pad { width: 100%; max-width: 380px; aspect-ratio: 1; background: var(--panel-2); border-radius: 16px; touch-action: none; display: block; }
+.lab-stage { width: 100%; max-width: 380px; touch-action: none; }
+.lab-ink { fill: rgba(255,122,61,.08); stroke: var(--accent); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
+.lab-real { fill: none; stroke: #6cb8ff; stroke-width: 1; stroke-dasharray: 2.5 2; }
+.lab-real.fill { fill: rgba(108,184,255,.15); }
+.lab-hint { font-size: 14px; color: var(--muted); text-align: center; margin: 0; max-width: 360px; }
+.lab-legend { font-size: 13px; text-align: center; margin: 0; }
+.k-real { color: #6cb8ff; font-weight: 700; } .k-you { color: var(--accent); font-weight: 700; }
+.lab-glass { fill: none; stroke: #d6ecff; stroke-width: 1.3; stroke-linejoin: round; }
+.lab-water { fill: rgba(108,184,255,.45); }
+.lab-level { stroke: var(--accent); stroke-width: 1; }
+.lab-jar { width: 100%; max-width: 380px; height: auto; background: var(--panel-2); border-radius: 16px; }
+.lab-num { font-size: 24px; text-align: center; }
+.lab-shape { fill: var(--mint); fill-opacity: .8; stroke: #062018; stroke-width: .4; fill-rule: evenodd; }
+.lab-mark { stroke: var(--accent); stroke-width: 1.2; fill: none; }
+.lab-mark circle { fill: var(--accent); stroke: #fff; stroke-width: .6; }
+.lab-mark.real { stroke: #6cb8ff; } .lab-mark.real circle { fill: #6cb8ff; }
+.lab-ground { stroke: var(--muted); stroke-width: 1; }
+.lab-ref { stroke: var(--line); stroke-width: .8; stroke-dasharray: 2 2; }
+.lab-tower { fill: #efe6d2; stroke: #8b8270; stroke-width: .5; }
+.lab-band { stroke: #b9ae95; stroke-width: .5; }
+.lab-road { stroke: #4b5063; stroke-width: 7; stroke-linecap: round; }
+.lab-road-mid { stroke: #fff; stroke-width: .6; stroke-dasharray: 3 3; }
+.lab-axis { stroke: var(--gold); stroke-width: 1.2; }
+.lab-earth { fill: #2a6fb0; stroke: #9fd0ff; stroke-width: .6; }
+.lab-ghost { fill: none; stroke: #6cb8ff; stroke-width: .8; stroke-dasharray: 2 1.6; }
+.lab-big { font-size: 34px; font-weight: 800; margin: 0; }
+.lab-points { text-align: center; font-size: 40px; font-weight: 800; color: var(--mint); }
+.lab-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 10px 0; }
+.lab-metrics div { background: var(--panel-2); border-radius: 12px; padding: 10px; display: grid; gap: 2px; text-align: center; font-size: 14px; }
+.lab-settings, .lab-raw { margin-top: 14px; } .lab-settings summary, .lab-raw summary { cursor: pointer; color: var(--muted); font-weight: 700; }
+.lab-settings .field { margin: 10px 0; }
+.lab-raw pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; color: var(--muted); max-height: 160px; overflow: auto; }
 </style>
 </head>
 <body>
@@ -101,6 +136,7 @@ import { CONFIG } from './config.js';
 import { rpc, fmt, fmtDate, esc, swatchHtml, fmtPts, store, rhythmPoints, rhythmVerdict, rhythmTimeline } from './common.js';
 import { createRhythm, createRecorder, PRACTICE_RHYTHM, PRACTICE_WORDS, syllables } from './widgets.js';
 import { createSetEditor } from './editor.js';
+import { LAB } from './lab.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -200,7 +236,12 @@ function render() {
       });
     }).join('') : '<div class="empty">Nothing has been played yet.</div>';
   } else if (tab === 'try') {
-    html = `<div class="card"><h2>Try tap the rhythm</h2>
+    html = `<div class="card"><h2>New challenge types <span class="tag">testing</span></h2>
+      <p class="hint">Not in the quiz yet. Play them like a player would, then tweak the settings until the scoring feels fair.</p>
+      <div class="try-list" id="labList">${Object.entries(LAB).map(([k, c]) => `<div class="try-song" data-lab="${k}"><b>${c.title}</b></div>`).join('')}</div>
+    </div>
+    <div id="labArea"></div>
+    <div class="card"><h2>Try tap the rhythm</h2>
       <p class="hint">Test the rhythm question exactly as players see it. Nothing is saved to the quiz and nobody gets points.</p>
       <div class="try-list" id="tryList"></div>
     </div>
@@ -268,6 +309,10 @@ function bindActions() {
   });
   if ($('screenCard')) loadScreenCard();
   if ($('tryList')) setupTry();
+  if ($('labList')) $('labList').querySelectorAll('[data-lab]').forEach((b) => b.onclick = () => {
+    $('labList').querySelectorAll('.try-song').forEach((x) => x.classList.toggle('on', x === b));
+    openLab(b.dataset.lab);
+  });
   const sp = $('savePass');
   if (sp) sp.onclick = async () => {
     try { await admin('set_password', { new: $('newPass').value }); pass = $('newPass').value; sessionStorage.setItem('bp_admin', pass); toast('Password changed', true); $('newPass').value = ''; }
@@ -319,6 +364,52 @@ function usePicker() {
   if (!sets.length) return '<p class="hint">No sets in the queue.</p>';
   return sets.map((s) => `<div class="use-set"><div class="use-head"><b>${s.play_date ? 'Today' : s.is_backup ? 'Backup' : (s.expected_date ? fmtDate(s.expected_date, { weekday: 'short', day: 'numeric', month: 'short' }) : 'Queued')}</b> · ${esc(s.author)}</div>
     ${s.questions.map((q, k) => `<button type="button" class="use-q" data-use="${s.id}:${k}">${KIND_ICON[q.kind] || '❓'} ${esc(q.prompt)}</button>`).join('')}</div>`).join('');
+}
+
+// ---------- New challenge types (lab) ----------
+const labParams = {};
+function openLab(kind) {
+  const c = LAB[kind];
+  const p = labParams[kind] ||= Object.fromEntries(c.params.map((x) => [x.k, x.def]));
+  const area = $('labArea');
+  area.innerHTML = `<div class="card lab-card">
+    <div class="tmp-step" style="text-align:left">Test question</div>
+    <h2 id="labPrompt">${esc(c.prompt(p))}</h2>
+    <div id="labPlay"></div>
+    <div class="tmp-row" id="labBtns"><button type="button" class="btn ghost" id="labRedo">↻ Start over</button><button type="button" class="btn" id="labLock" disabled>Lock in ✓</button></div>
+    <div id="labResult"></div>
+    <details class="lab-settings"><summary>Settings</summary>
+      ${c.params.map((x) => `<label class="field"><span>${esc(x.label)}</span>${x.options
+        ? `<select class="input" data-k="${x.k}">${Object.entries(x.options).map(([v, n]) => `<option value="${v}"${v === p[x.k] ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
+        : `<input class="input" type="number" step="${x.step}" data-k="${x.k}" value="${p[x.k]}">`}</label>`).join('')}
+      <button type="button" class="btn ghost" id="labApply">Apply and play again</button>
+    </details></div>`;
+  let answer = null;
+  const play = () => {
+    answer = null; $('labLock').disabled = true; $('labResult').innerHTML = ''; $('labBtns').style.display = '';
+    $('labPrompt').textContent = c.prompt(p);
+    c.setup($('labPlay'), p, (a) => { answer = a; $('labLock').disabled = !a; });
+  };
+  $('labRedo').onclick = play;
+  $('labLock').onclick = () => {
+    if (!answer) return;
+    const r = c.score(p, answer);
+    const { note, ...m } = r.metrics;
+    $('labPlay').innerHTML = c.reveal(p, answer);
+    $('labBtns').style.display = 'none';
+    $('labResult').innerHTML = `<div class="lab-points">${fmtPts(r.points)}</div>
+      <div class="lab-metrics">${Object.entries(m).map(([k, v]) => `<div><span class="muted">${esc(k)}</span><b>${esc(String(v))}</b></div>`).join('')}</div>
+      ${note ? `<p class="hint" style="text-align:center">${esc(note)}</p>` : ''}
+      <button type="button" class="btn block" id="labAgain">Play again</button>
+      <details class="lab-raw"><summary>Raw answer (for debugging)</summary><pre>${esc(JSON.stringify(answer))}</pre></details>`;
+    $('labAgain').onclick = play;
+  };
+  $('labApply').onclick = () => {
+    area.querySelectorAll('[data-k]').forEach((i) => { const x = c.params.find((q) => q.k === i.dataset.k); p[x.k] = x.options ? i.value : +i.value; });
+    play();
+  };
+  play();
+  area.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function openTry(t) {

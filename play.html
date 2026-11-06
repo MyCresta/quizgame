@@ -170,7 +170,10 @@ async function viewDone(result) {
     return;
   }
   const qs = today.questions;
-  const lines = result.points.map((p) => {
+  // Repair results saved by an earlier bug, where extra fields came back as their own entries.
+  const pts = [];
+  for (const p of result.points) { if (p && p.question_id != null) pts.push({ ...p }); else if (p && pts.length) Object.assign(pts[pts.length - 1], p); }
+  const lines = pts.map((p) => {
     const q = qs.find((x) => x.id === p.question_id);
     const pct = p.points / 10000;
     const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';

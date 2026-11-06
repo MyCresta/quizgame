@@ -409,9 +409,12 @@ const MAZE_HOLES = [
   [36, 22, 250], [60, 10, 250],
   [66, 52, 750], [46, 40, 750], [28, 52, 750],
   [32, 74, 1500], [52, 84, 1500], [72, 72, 1500],
-  [76, 112, 2500], [56, 100, 2500], [36, 112, 2500],
-  [40, 142, 3500], [60, 130, 3500], [70, 144, 3500],
+  // The last two rows drift slowly: [x, y, value, sideways swing, up-down swing, seconds per swing, phase]
+  [76, 112, 2500, 9, 0, 5.5, 0], [56, 100, 2500, 0, 3, 4, 1.5], [36, 112, 2500, 9, 0, 6.5, 3],
+  [40, 142, 3500, 11, 0, 4.5, 2], [60, 130, 3500, 8, 2.5, 5, 0.5], [70, 144, 3500, 7, 0, 3.8, 4],
 ];
+// Where a hole is t seconds after the marble starts.
+const holeAt = (h, t) => (h[3] || h[4] ? [h[0] + (h[3] || 0) * Math.sin((2 * Math.PI * t) / h[5] + h[6]), h[1] + (h[4] || 0) * Math.sin((2 * Math.PI * t) / (h[5] * 1.3) + h[6])] : [h[0], h[1]]);
 const MAZE_GOAL = [88, 138, 5000];
 export const MAZE_VALUES = [0, ...new Set(MAZE_HOLES.map((h) => h[2])), MAZE_GOAL[2]];
 const maze = {
@@ -448,7 +451,8 @@ const maze = {
       ctx.strokeStyle = '#c9b48a'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
       for (const [x1, y1, x2, y2] of MAZE_WALLS) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
       ctx.font = 'bold 3.2px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      for (const [x, y, v] of MAZE_HOLES) { ctx.fillStyle = '#0b0d12'; ctx.beginPath(); ctx.arc(x, y, MZ.hole, 0, 7); ctx.fill(); ctx.fillStyle = '#9aa0b4'; ctx.fillText(v >= 1000 ? `${v / 1000}k` : v, x, y); }
+      const t = ball ? (last - t0) / 1000 : 0;
+      for (const h of MAZE_HOLES) { const [x, y] = holeAt(h, t), v = h[2]; ctx.fillStyle = '#0b0d12'; ctx.beginPath(); ctx.arc(x, y, MZ.hole, 0, 7); ctx.fill(); ctx.fillStyle = '#9aa0b4'; ctx.fillText(v >= 1000 ? `${v / 1000}k` : v, x, y); }
       ctx.fillStyle = '#5ee0b1'; ctx.beginPath(); ctx.arc(MAZE_GOAL[0], MAZE_GOAL[1], MZ.goal, 0, 7); ctx.fill();
       ctx.fillStyle = '#062018'; ctx.font = 'bold 3.6px system-ui'; ctx.fillText('5k', MAZE_GOAL[0], MAZE_GOAL[1]);
       ctx.fillStyle = '#9aa0b4'; ctx.font = 'bold 3px system-ui'; ctx.fillText('START', 12, 4);
@@ -502,9 +506,17 @@ const maze = {
       ball.vx = (ball.vx + ax * A * dt) * (1 - 0.9 * dt); ball.vy = (ball.vy + ay * A * dt) * (1 - 0.9 * dt);
       const sp = Math.hypot(ball.vx, ball.vy); if (sp > 80) { ball.vx *= 80 / sp; ball.vy *= 80 / sp; }
       const n = Math.ceil(sp * dt / 1.5) || 1;
-      for (let i = 0; i < n; i++) { ball.x += ball.vx * dt / n; ball.y += ball.vy * dt / n; collide(); }
-      if (Math.hypot(ball.x - MAZE_GOAL[0], ball.y - MAZE_GOAL[1]) < MZ.goal - 1) return end(MAZE_GOAL[2]);
-      for (const [x, y, v] of MAZE_HOLES) if (Math.hypot(ball.x - x, ball.y - y) < MZ.hole - 1.2) return end(v);
+      const t = (now - t0) / 1000, holes = MAZE_HOLES.map((h) => [...holeAt(h, t), h[2]]);
+      // Rolling over a hole's edge pulls the marble in (stronger the closer to the middle), so you can't just skim across.
+      for (const [x, y] of holes) {
+        const dx = x - ball.x, dy = y - ball.y, d = Math.hypot(dx, dy);
+        if (d < MZ.hole + 0.6 && d > 1e-6) { const pull = 420 * (1 - d / (MZ.hole + 0.6)) * dt; ball.vx += (dx / d) * pull; ball.vy += (dy / d) * pull; }
+      }
+      for (let i = 0; i < n; i++) {
+        ball.x += ball.vx * dt / n; ball.y += ball.vy * dt / n; collide();
+        if (Math.hypot(ball.x - MAZE_GOAL[0], ball.y - MAZE_GOAL[1]) < MZ.goal - 1) return end(MAZE_GOAL[2]);
+        for (const [x, y, v] of holes) if (Math.hypot(ball.x - x, ball.y - y) < MZ.hole - 0.5) return end(v);
+      }
       if ((now - t0) / 1000 > MZ.time) { msg.textContent = 'Time’s up!'; return end(0); }
       draw();
       raf = requestAnimationFrame(step);

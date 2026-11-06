@@ -238,7 +238,7 @@ function viewQuestion(i) {
     number: `<div class="numwrap"><input id="num" inputmode="decimal" autocomplete="off" placeholder="Your guess" value="${a ? esc(String(a.raw ?? a.value)) : ''}">${q.unit ? `<span class="unit">${esc(q.unit)}</span>` : ''}</div>
        <div class="preview" id="preview"></div>`,
   };
-  const body = LAB[q.kind] ? `${a && q.kind !== 'maze' ? '<div class="muted" style="font-size:14px;text-align:center">Your answer is saved. Do it again to change it.</div>' : ''}<div id="w" class="lab-w"></div>` : bodies[q.kind] || bodies.number;
+  const body = LAB[q.kind] ? '<div id="w" class="lab-w"></div>' : bodies[q.kind] || bodies.number;
   $('view').innerHTML = `<div class="card">
     ${progress(i)}
     <div class="qnum">Question ${i + 1} of 3</div>
@@ -252,11 +252,12 @@ function viewQuestion(i) {
   </div>`;
 
   if (LAB[q.kind]) {
-    if (q.kind === 'maze' && a) $('w').innerHTML = `<p class="lab-big">${a.lab.holes.map((v) => fmt(v)).join(' + ')}</p><p class="muted">Both marbles are done.</p>`;
-    else labCleanup = LAB[q.kind].setup($('w'), q.meta, (ans) => {
-      if (ans) answers[q.id] = { lab: ans }; else if (q.kind !== 'maze') delete answers[q.id];
+    // Some challenges are one go only (perfect circle, the maze); see lab.js. Progress is saved as you go,
+    // so leaving or reloading can't be used for a do-over.
+    labCleanup = LAB[q.kind].setup($('w'), q.meta, (ans) => {
+      if (ans) answers[q.id] = { lab: ans }; else delete answers[q.id];
       saveDraft();
-    }) || null;
+    }, { live: true, prev: a?.lab, progress: answers[`maze-${q.id}`], onProgress: (r) => { answers[`maze-${q.id}`] = r; saveDraft(); } }) || null;
   } else if (q.kind === 'map') {
     if (typeof L === 'undefined') { $('maphint').innerHTML = '<span class="error">The map failed to load. Check your connection and reload.</span>'; }
     else {

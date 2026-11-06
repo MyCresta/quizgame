@@ -77,12 +77,22 @@ function resample(pts, n) {
 }
 
 // One-finger freehand drawing on a square canvas. Each new stroke replaces the old one.
-function drawPad(el, onAnswer, { guide = '' } = {}) {
-  el.innerHTML = `<svg class="lab-pad" viewBox="0 0 100 100">${guide}<path class="lab-ink" d=""/></svg>
-    <p class="lab-hint">Draw in one go without lifting your finger. Drawing again starts over.</p>`;
-  const svg = el.querySelector('svg'), ink = el.querySelector('.lab-ink');
+// One-finger freehand drawing on a square canvas. maxTries limits how many drawings count (the last one
+// is the answer); prev restores an earlier drawing when you come back to the question.
+function drawPad(el, onAnswer, { maxTries = Infinity, prev = null } = {}) {
+  let used = prev?.tries || (prev?.pts ? 1 : 0), shown = prev?.pts || null;
+  const hint = () => maxTries === Infinity ? 'Draw in one go without lifting your finger. Drawing again starts over.'
+    : maxTries === 1 ? (used ? '<b>Done.</b> You only get one go at this one.' : 'You get <b>one go</b>: draw it in one stroke without lifting your finger.')
+    : used >= maxTries ? `<b>That was your last try</b> (${maxTries} of ${maxTries}). This drawing counts.`
+    : `Draw in one stroke without lifting your finger. ${used ? `Try ${used} of ${maxTries}: draw again to replace it.` : `You get up to ${maxTries} tries; the last one counts.`}`;
+  el.innerHTML = `<svg class="lab-pad" viewBox="0 0 100 100"><path class="lab-ink" d="${shown ? pathD(shown, true) : ''}"/></svg><p class="lab-hint">${hint()}</p>`;
+  const svg = el.querySelector('svg'), ink = el.querySelector('.lab-ink'), msg = el.querySelector('.lab-hint');
   let pts = null;
-  svg.addEventListener('pointerdown', (e) => { e.preventDefault(); svg.setPointerCapture(e.pointerId); pts = [svgPoint(svg, e)]; ink.setAttribute('d', pathD(pts)); onAnswer(null); });
+  svg.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (used >= maxTries) { msg.innerHTML = hint(); return; }
+    svg.setPointerCapture(e.pointerId); pts = [svgPoint(svg, e)]; ink.setAttribute('d', pathD(pts));
+  });
   svg.addEventListener('pointermove', (e) => {
     if (!pts) return;
     const q = svgPoint(svg, e), l = pts[pts.length - 1];
@@ -91,10 +101,11 @@ function drawPad(el, onAnswer, { guide = '' } = {}) {
   const end = () => {
     if (!pts) return;
     const done = pts; pts = null;
-    if (done.length < 8) { ink.setAttribute('d', ''); return; }
+    if (done.length < 8) { ink.setAttribute('d', shown ? pathD(shown, true) : ''); return; }   // a tap or a slip doesn't use up a try
     const keep = done.length > 200 ? done.filter((_, k) => k % Math.ceil(done.length / 200) === 0 || k === done.length - 1) : done;
-    ink.setAttribute('d', pathD(keep, true));
-    onAnswer({ pts: keep.map((p) => [r2(p[0]), r2(p[1])]) });
+    shown = keep.map((p) => [r2(p[0]), r2(p[1])]); used++;
+    ink.setAttribute('d', pathD(shown, true)); msg.innerHTML = hint();
+    onAnswer({ pts: shown, tries: used });
   };
   svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
 }
@@ -121,7 +132,7 @@ const circle = {
   meta: (p) => ({ tol: p.tol }),
   title: '⭕ Perfect circle', prompt: () => 'Draw a perfect circle',
   params: [{ k: 'tol', label: 'Strictness (roundness error at which points fall off; lower = stricter)', def: 0.08, step: 0.01 }],
-  setup(el, p, onAnswer) { drawPad(el, onAnswer); },
+  setup(el, p, onAnswer, opts = {}) { drawPad(el, onAnswer, { maxTries: opts.live ? 1 : Infinity, prev: opts.prev }); },
   score(p, a) {
     const f = circleFit(a.pts);
     if (f.R < 8) return { points: 1, metrics: { note: 'Too small' } };
@@ -145,7 +156,7 @@ const country = {
     { k: 'floor', label: 'Overlap that gives 0 points', def: 0.45, step: 0.05 },
     { k: 'top', label: 'Overlap that gives full points', def: 0.9, step: 0.05 },
   ],
-  setup(el, p, onAnswer) { drawPad(el, onAnswer); },
+  setup(el, p, onAnswer, opts = {}) { drawPad(el, onAnswer, { maxTries: opts.live ? 3 : Infinity, prev: opts.prev }); },
   score(p, a) {
     const real = normShape(COUNTRIES[p.country].pts), mine = normShape(a.pts);
     const o = iou(real, mine);
@@ -198,9 +209,9 @@ const glass = {
     { k: 'target', label: 'Target (% of the volume)', def: 50, step: 5 },
     { k: 'tol', label: 'Volume error that gives 0 points (%-points)', def: 30, step: 5 },
   ],
-  setup(el, p, onAnswer) {
-    const g = GLASSES[p.glass];
-    el.innerHTML = `<div class="lab-stage">${glassSvg(g, [])}</div><p class="lab-hint">Touch the glass and drag up or down to pour.</p>`;
+  setup(el, p, onAnswer, opts = {}) {
+    const g = GLASSES[p.glass], h0 = opts.prev?.level;
+    el.innerHTML = `<div class="lab-stage">${glassSvg(g, h0 == null ? [] : [{ h: h0, fill: true, line: 'lab-level' }])}</div><p class="lab-hint">Touch the glass and drag up or down to pour.</p>`;
     const stage = el.querySelector('.lab-stage');
     let down = false;
     const set = (e) => {
@@ -292,9 +303,9 @@ const jar = {
     { k: 'height', label: 'Filled height (in beans)', def: 11, step: 1 },
     { k: 'tol', label: 'Ratio error that gives 0 points (0.3 = off by 2×)', def: 0.3, step: 0.05 },
   ],
-  setup(el, p, onAnswer) {
+  setup(el, p, onAnswer, opts = {}) {
     el.innerHTML = `<canvas class="lab-jar" width="640" height="760"></canvas>
-      <label class="field"><span>Your guess</span><input class="input lab-num" type="number" inputmode="numeric" min="1" placeholder="e.g. 350"></label>`;
+      <label class="field"><span>Your guess</span><input class="input lab-num" type="number" inputmode="numeric" min="1" placeholder="e.g. 350" value="${opts.prev?.value ?? ''}"></label>`;
     drawJar(el.querySelector('canvas'), p);
     const inp = el.querySelector('input');
     inp.addEventListener('input', () => { const v = Math.round(+inp.value); onAnswer(v > 0 ? { value: v } : null); });
@@ -324,9 +335,9 @@ const centre = {
     { k: 'shape', label: 'Shape', def: 'sweden', options: Object.fromEntries(Object.entries(SHAPES).map(([k, v]) => [k, v.name])) },
     { k: 'tol', label: 'Miss (share of the shape\u2019s longest side) that gives 0 points', def: 0.25, step: 0.05 },
   ],
-  setup(el, p, onAnswer) {
-    const poly = shapeIn100(p.shape);
-    el.innerHTML = `<svg class="lab-pad" viewBox="0 0 100 100"><path class="lab-shape" d="${pathD(poly, true)}"/><g class="lab-mark" style="display:none"><circle r="2.6"/><path d="M-5,0H5M0,-5V5"/></g></svg>
+  setup(el, p, onAnswer, opts = {}) {
+    const poly = shapeIn100(p.shape), pv = opts.prev;
+    el.innerHTML = `<svg class="lab-pad" viewBox="0 0 100 100"><path class="lab-shape" d="${pathD(poly, true)}"/><g class="lab-mark" ${pv ? `transform="translate(${pv.x},${pv.y})"` : 'style="display:none"'}><circle r="2.6"/><path d="M-5,0H5M0,-5V5"/></g></svg>
       <p class="lab-hint">Imagine the shape cut out of cardboard. Where would it balance on a pin? Tap to place, tap again to move.</p>`;
     const svg = el.querySelector('svg'), mark = el.querySelector('.lab-mark');
     svg.addEventListener('pointerdown', (e) => {
@@ -373,9 +384,9 @@ const angle = {
     { k: 'preset', label: 'What', def: 'pisa', options: Object.fromEntries(Object.entries(ANGLES).map(([k, v]) => [k, v.name])) },
     { k: 'tol', label: 'Degrees off that gives 0 points', def: 10, step: 1 },
   ],
-  setup(el, p, onAnswer) {
+  setup(el, p, onAnswer, opts = {}) {
     const A = ANGLES[p.preset];
-    let deg = 0;
+    let deg = opts.prev?.deg ?? 0;
     const paint = () => { el.querySelector('.lab-stage').innerHTML = angleSvg(A.look, A.from, deg); };
     el.innerHTML = '<div class="lab-stage"></div><p class="lab-hint">Drag sideways anywhere on the picture to tilt it.</p>';
     paint();
@@ -423,13 +434,19 @@ const maze = {
   params: [
     { k: 'speed', label: 'How strongly tilting pushes the marble', def: 1, step: 0.1 },
   ],
-  setup(el, p, onAnswer) {
+  // opts.live: the real quiz. opts.progress: marbles already rolled (a marble counts as 0 the moment it
+  // starts, so leaving or reloading mid-roll can't be used to get a do-over). opts.onProgress saves it.
+  setup(el, p, onAnswer, opts = {}) {
     el.innerHTML = `<canvas class="lab-maze" width="400" height="600"></canvas>
-      <p class="lab-hint" id="mzMsg">Hold the phone flat-ish in front of you, then press Start. Tilt to roll. Two marbles, the best holes are at the end.</p>
-      <button type="button" class="btn block" id="mzGo">Start marble 1</button>`;
-    const cv = el.querySelector('canvas'), ctx = cv.getContext('2d'), msg = el.querySelector('#mzMsg'), go = el.querySelector('#mzGo');
+      <p class="lab-hint" id="mzMsg"></p>
+      <div class="tmp-row" style="width:100%;max-width:360px"><button type="button" class="btn ghost" id="mzSkip">Skip practice</button><button type="button" class="btn" id="mzGo"></button></div>`;
+    const cv = el.querySelector('canvas'), ctx = cv.getContext('2d'), msg = el.querySelector('#mzMsg'), go = el.querySelector('#mzGo'), skip = el.querySelector('#mzSkip');
+    const row = go.parentElement;
     const S = cv.width / MZ.w;
-    const results = [];
+    const results = (opts.progress || []).slice(0, 2);
+    const REAL = { walls: MAZE_WALLS, holes: MAZE_HOLES, goal: MAZE_GOAL, start: [12, 12], time: MZ.time };
+    const PRACTICE = { walls: [[18, 62, 82, 62]], holes: [[28, 100, 0], [72, 100, 0]], goal: [50, 128, 0], start: [50, 14], time: Infinity, practice: true };
+    let lv = results.length ? REAL : PRACTICE;
     let ball = null, tilt = { x: 0, y: 0 }, base = null, sensor = false, pointer = null, raf = 0, last = 0, t0 = 0, keys = {};
     const onOri = (e) => {
       if (e.gamma == null) return;
@@ -444,29 +461,34 @@ const maze = {
     cv.addEventListener('pointerdown', (e) => { e.preventDefault(); cv.setPointerCapture(e.pointerId); pointer = pos(e); });
     cv.addEventListener('pointermove', (e) => { if (pointer) pointer = pos(e); });
     cv.addEventListener('pointerup', () => { pointer = null; });
+    const fmtV = (v) => v.toLocaleString('sv-SE');
 
     function draw() {
       ctx.setTransform(S, 0, 0, S, 0, 0);
-      ctx.fillStyle = '#2a2f3f'; ctx.fillRect(0, 0, MZ.w, MZ.h);
+      ctx.fillStyle = lv.practice ? '#25303a' : '#2a2f3f'; ctx.fillRect(0, 0, MZ.w, MZ.h);
       ctx.strokeStyle = '#c9b48a'; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
-      for (const [x1, y1, x2, y2] of MAZE_WALLS) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
+      for (const [x1, y1, x2, y2] of lv.walls) { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); }
       ctx.font = 'bold 3.2px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const t = ball ? (last - t0) / 1000 : 0;
-      for (const h of MAZE_HOLES) { const [x, y] = holeAt(h, t), v = h[2]; ctx.fillStyle = '#0b0d12'; ctx.beginPath(); ctx.arc(x, y, MZ.hole, 0, 7); ctx.fill(); ctx.fillStyle = '#9aa0b4'; ctx.fillText(v >= 1000 ? `${v / 1000}k` : v, x, y); }
-      ctx.fillStyle = '#5ee0b1'; ctx.beginPath(); ctx.arc(MAZE_GOAL[0], MAZE_GOAL[1], MZ.goal, 0, 7); ctx.fill();
-      ctx.fillStyle = '#062018'; ctx.font = 'bold 3.6px system-ui'; ctx.fillText('5k', MAZE_GOAL[0], MAZE_GOAL[1]);
-      ctx.fillStyle = '#9aa0b4'; ctx.font = 'bold 3px system-ui'; ctx.fillText('START', 12, 4);
+      for (const h of lv.holes) { const [x, y] = holeAt(h, t), v = h[2]; ctx.fillStyle = '#0b0d12'; ctx.beginPath(); ctx.arc(x, y, MZ.hole, 0, 7); ctx.fill(); ctx.fillStyle = '#9aa0b4'; ctx.fillText(lv.practice ? '✗' : v >= 1000 ? `${v / 1000}k` : v, x, y); }
+      ctx.fillStyle = '#5ee0b1'; ctx.beginPath(); ctx.arc(lv.goal[0], lv.goal[1], MZ.goal, 0, 7); ctx.fill();
+      ctx.fillStyle = '#062018'; ctx.font = 'bold 3.6px system-ui'; ctx.fillText(lv.practice ? '✓' : '5k', lv.goal[0], lv.goal[1]);
+      ctx.fillStyle = '#9aa0b4'; ctx.font = 'bold 3px system-ui'; ctx.fillText(lv.practice ? 'PRACTICE · NO POINTS' : 'START', lv.practice ? 50 : 12, 4);
       if (ball) {
         const r = Math.max(0.3, MZ.ball * (ball.fall ?? 1));
         const g = ctx.createRadialGradient(ball.x - r / 3, ball.y - r / 3, r / 6, ball.x, ball.y, r);
         g.addColorStop(0, '#fff'); g.addColorStop(1, '#ff7a3d');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ball.x, ball.y, r, 0, 7); ctx.fill();
       }
+      if (sensor) {   // a little spirit level, so you can see the phone's tilt is coming through
+        ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.arc(92, 142, 5, 0, 7); ctx.stroke();
+        ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(92 + tilt.x * 4, 142 + tilt.y * 4, 1.4, 0, 7); ctx.fill();
+      }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (ball && !ball.fall) { ctx.fillStyle = '#f5efe4'; ctx.font = 'bold 22px system-ui'; ctx.textAlign = 'right'; ctx.fillText(`${Math.max(0, Math.ceil(MZ.time - (last - t0) / 1000))} s`, cv.width - 10, 20); }
+      if (ball && !ball.fall && lv.time < Infinity) { ctx.fillStyle = '#f5efe4'; ctx.font = 'bold 22px system-ui'; ctx.textAlign = 'right'; ctx.fillText(`${Math.max(0, Math.ceil(lv.time - (last - t0) / 1000))} s`, cv.width - 10, 20); }
     }
     function collide() {
-      const segs = MAZE_WALLS.concat([[0, 0, MZ.w, 0], [MZ.w, 0, MZ.w, MZ.h], [MZ.w, MZ.h, 0, MZ.h], [0, MZ.h, 0, 0]]);
+      const segs = lv.walls.concat([[0, 0, MZ.w, 0], [MZ.w, 0, MZ.w, MZ.h], [MZ.w, MZ.h, 0, MZ.h], [0, MZ.h, 0, 0]]);
       for (const [x1, y1, x2, y2] of segs) {
         const dx = x2 - x1, dy = y2 - y1, t = Math.max(0, Math.min(1, ((ball.x - x1) * dx + (ball.y - y1) * dy) / (dx * dx + dy * dy)));
         const cx = x1 + t * dx, cy = y1 + t * dy, ex = ball.x - cx, ey = ball.y - cy, d = Math.hypot(ex, ey), min = MZ.ball + 1.1;
@@ -478,22 +500,43 @@ const maze = {
         }
       }
     }
-    function end(value) {
+    function end(value, goal) {
       ball.fall = 1;
-      const shrink = () => { ball.fall -= 0.08; draw(); if (ball.fall > 0) raf = requestAnimationFrame(shrink); else finish(value); };
+      const shrink = () => { ball.fall -= 0.08; draw(); if (ball.fall > 0) raf = requestAnimationFrame(shrink); else finish(value, goal); };
       shrink();
     }
-    function finish(value) {
-      results.push(value);
+    function showState() {   // buttons and text between rolls
+      row.hidden = false; go.disabled = false;
+      if (results.length >= 2) {
+        row.hidden = true;
+        msg.innerHTML = `<b>Marble 1: ${fmtV(results[0])} · Marble 2: ${fmtV(results[1])}</b>`;
+        return;
+      }
+      skip.hidden = !lv.practice;
+      if (lv.practice) {
+        go.textContent = 'Start practice';
+        skip.textContent = 'Skip practice';
+        msg.innerHTML = 'First a practice round: tilt your phone to roll the marble into the <b>green hole</b>. Avoid the ✗ holes. No points, try as many times as you like.';
+      } else {
+        go.textContent = `Start marble ${results.length + 1} of 2`;
+        msg.innerHTML = results.length
+          ? `Marble 1: <b>${fmtV(results[0])}</b> points. One marble left.`
+          : 'The real game: <b>two marbles, one go each</b>. Every hole has a value and they get better the further you get; the green goal at the end is worth 5 000. You have 60 seconds per marble.';
+      }
+    }
+    function finish(value, goal) {
       ball = null; draw();
       navigator.vibrate?.(60);
-      if (results.length < 2) {
-        msg.textContent = `Marble 1: ${value.toLocaleString('sv-SE')} points. Ready for marble 2?`;
-        go.textContent = 'Start marble 2'; go.hidden = false;
-      } else {
-        msg.textContent = `Marble 1: ${results[0].toLocaleString('sv-SE')} · Marble 2: ${results[1].toLocaleString('sv-SE')}`;
-        onAnswer({ holes: results.slice() });
+      if (lv.practice) {
+        showState();
+        go.textContent = 'Practice again'; skip.hidden = false; skip.textContent = 'Start the real game →';
+        msg.innerHTML = goal ? '🎉 Nice, you’ve got it! Practice again or start the real game.' : 'Oops, that’s a ✗ hole. Try again, or start the real game when you’re ready.';
+        return;
       }
+      results[results.length - 1] = value;
+      opts.onProgress?.(results.slice());
+      showState();
+      if (results.length >= 2) onAnswer({ holes: results.slice() });
     }
     function step(now) {
       const dt = Math.min(0.04, (now - last) / 1000); last = now;
@@ -506,7 +549,7 @@ const maze = {
       ball.vx = (ball.vx + ax * A * dt) * (1 - 0.9 * dt); ball.vy = (ball.vy + ay * A * dt) * (1 - 0.9 * dt);
       const sp = Math.hypot(ball.vx, ball.vy); if (sp > 80) { ball.vx *= 80 / sp; ball.vy *= 80 / sp; }
       const n = Math.ceil(sp * dt / 1.5) || 1;
-      const t = (now - t0) / 1000, holes = MAZE_HOLES.map((h) => [...holeAt(h, t), h[2]]);
+      const t = (now - t0) / 1000, holes = lv.holes.map((h) => [...holeAt(h, t), h[2]]);
       // Rolling over a hole's edge pulls the marble in (stronger the closer to the middle), so you can't just skim across.
       for (const [x, y] of holes) {
         const dx = x - ball.x, dy = y - ball.y, d = Math.hypot(dx, dy);
@@ -514,23 +557,26 @@ const maze = {
       }
       for (let i = 0; i < n; i++) {
         ball.x += ball.vx * dt / n; ball.y += ball.vy * dt / n; collide();
-        if (Math.hypot(ball.x - MAZE_GOAL[0], ball.y - MAZE_GOAL[1]) < MZ.goal - 1) return end(MAZE_GOAL[2]);
-        for (const [x, y, v] of holes) if (Math.hypot(ball.x - x, ball.y - y) < MZ.hole - 0.5) return end(v);
+        if (Math.hypot(ball.x - lv.goal[0], ball.y - lv.goal[1]) < MZ.goal - 1) return end(lv.goal[2], true);
+        for (const [x, y, v] of holes) if (Math.hypot(ball.x - x, ball.y - y) < MZ.hole - 0.5) return end(v, false);
       }
-      if ((now - t0) / 1000 > MZ.time) { msg.textContent = 'Time’s up!'; return end(0); }
+      if ((now - t0) / 1000 > lv.time) { msg.textContent = 'Time’s up!'; return end(0, false); }
       draw();
       raf = requestAnimationFrame(step);
     }
     go.onclick = async () => {
       try { if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch { /* fall back to touch */ }
-      base = null; go.hidden = true;
-      msg.textContent = 'Tilt to roll!';
-      ball = { x: 12, y: 12, vx: 0, vy: 0 };
+      if (!lv.practice) { results.push(0); opts.onProgress?.(results.slice()); }   // counts as 0 unless it finishes
+      base = null; row.hidden = true;
+      msg.textContent = lv.practice ? 'Tilt to roll into the green hole!' : `Marble ${results.length} of 2. Tilt to roll!`;
+      ball = { x: lv.start[0], y: lv.start[1], vx: 0, vy: 0 };
       last = t0 = performance.now();
       raf = requestAnimationFrame(step);
-      setTimeout(() => { if (!sensor && ball) msg.textContent = 'No tilt sensor found: hold your finger (or the mouse) where you want the marble to roll.'; }, 1200);
+      setTimeout(() => { if (!sensor && ball) msg.textContent = 'No tilt sensor found: hold your finger where you want the marble to roll.'; }, 1200);
     };
-    draw();
+    skip.onclick = () => { lv = REAL; draw(); showState(); };
+    showState(); draw();
+    if (results.length >= 2) onAnswer({ holes: results.slice() });
     return () => { cancelAnimationFrame(raf); window.removeEventListener('deviceorientation', onOri); window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); };
   },
   score(p, a) {

@@ -248,9 +248,9 @@ function render() {
     html = `<p class="hint">Backup sets are picked at random on days when the queue is empty. Each is used once.</p>
       <div class="actions"><button data-a="new-backup">＋ New backup set</button></div>` +
       (data.spares?.length ? `<div class="set" id="spareCard"><div class="head"><b>Spare questions</b><span class="meta">${data.spares.length} waiting</span></div>
-        <p class="hint">Questions you replaced with something else. Tick up to three and make them into a backup set (you can fill in the rest in the editor).</p>
+        <p class="hint">Questions that aren't in a set. Put one into a set (the question it replaces becomes a spare), or tick up to three and make them into a backup set.</p>
         <ol style="list-style:none;padding:0">${data.spares.map((sp) => `<li><label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="spare-pick" value="${sp.id}" style="margin-top:4px">
-          <span>${esc(sp.question.prompt)}<br><span class="ans">${answerText(sp.question)}</span>${sp.note ? `<span class="sub"> · ${esc(sp.note)}</span>` : ''}</span></label></li>`).join('')}</ol>
+          <span>${esc(sp.question.prompt)}<button type="button" class="swap-btn" data-spare-use="${sp.id}">⇄ Put in a set</button><br><span class="ans">${answerText(sp.question)}</span>${sp.note ? `<span class="sub"> · ${esc(sp.note)}</span>` : ''}</span></label></li>`).join('')}</ol>
         <div class="actions"><button data-a="spare-set">Make a backup set from the ticked ones</button></div></div>` : '') +
       (data.backups.length ? data.backups.map((s) => setCard(s, {
         title: esc(s.author), meta: 'backup',
@@ -263,6 +263,7 @@ function render() {
       <button class="btn" id="savePass">Save password</button></div>`;
   }
   if (swapFrom && (tab === 'queue' || tab === 'backups')) html = swapPicker() + html;
+  if (spareFrom && tab === 'backups') html = sparePicker() + html;
   $('view').innerHTML = html;
   bindActions();
   bindSwap();
@@ -279,11 +280,42 @@ function swapPicker() {
     <p class="hint">Pick the question to swap places with. It can be in another set or the same set, in the queue or in the backups.</p>
     ${sets.map((s) => `<div class="use-set"><div class="use-head"><b>${s.is_backup ? 'Backup' : s.expected_date ? fmtDate(s.expected_date, { weekday: 'short', day: 'numeric', month: 'short' }) : 'Queued'}</b> · ${esc(s.author)}</div>
       ${s.questions.map((q, k) => `<button type="button" class="use-q ${q.id === swapFrom ? 'from' : ''}" data-swap-to="${q.id}" ${q.id === swapFrom ? 'disabled' : ''}>${k + 1}. ${KIND_ICON[q.kind] || '❓'} ${esc(q.prompt)}</button>`).join('')}</div>`).join('')}
+    ${data.spares?.length ? `<div class="use-set"><div class="use-head"><b>Spare questions</b> · not in any set (the moved question becomes a spare)</div>
+      ${data.spares.map((sp) => `<button type="button" class="use-q" data-swap-spare="${sp.id}">${KIND_ICON[sp.question.kind] || '❓'} ${esc(sp.question.prompt)}</button>`).join('')}</div>` : ''}
     <div class="actions"><button data-swap-cancel>Cancel</button></div></div>`;
 }
+// ---------- Putting a spare question into a set ----------
+let spareFrom = null;   // id of the spare being placed
+const openSets = () => [...data.queue, ...data.backups.filter((s) => !s.played)];
+const setLabel = (s) => (s.is_backup ? 'Backup' : s.expected_date ? fmtDate(s.expected_date, { weekday: 'short', day: 'numeric', month: 'short' }) : 'Queued');
+function sparePicker() {
+  const sp = data.spares?.find((x) => x.id === spareFrom);
+  if (!sp) { spareFrom = null; return ''; }
+  return `<div class="card swap-card" id="swapCard"><h2>Put “${esc(sp.question.prompt)}” in a set</h2>
+    <p class="hint">Pick the question it should replace. You'll see the set in the editor first, then press Save. The replaced question becomes a spare.</p>
+    ${openSets().map((s) => `<div class="use-set"><div class="use-head"><b>${setLabel(s)}</b> · ${esc(s.author)}</div>
+      ${s.questions.map((q, k) => `<button type="button" class="use-q" data-spare-to="${s.id}:${k}">${k + 1}. ${KIND_ICON[q.kind] || '❓'} ${esc(q.prompt)}</button>`).join('')}</div>`).join('')}
+    <div class="actions"><button data-swap-cancel>Cancel</button></div></div>`;
+}
+function useSpareAt(spareId, setId, pos) {
+  const sp = data.spares.find((x) => x.id === spareId), set = findSet(setId);
+  const questions = set.questions.map((q, k) => (k === pos ? sp.question : q));
+  spareFrom = null; swapFrom = null;
+  openEditor({ ...set, questions });
+  editing.replaced = { question: set.questions[pos], note: `replaced by a spare in ${set.author}'s set` };
+  editing.spareIds = [spareId];
+  toast('Spare question put in the set. Check it, then press Save.', true);
+}
+
 function bindSwap() {
-  $('view').querySelectorAll('[data-swap]').forEach((b) => b.onclick = () => { swapFrom = +b.dataset.swap; render(); $('swapCard')?.scrollIntoView({ behavior: 'smooth' }); });
-  $('view').querySelector('[data-swap-cancel]')?.addEventListener('click', () => { swapFrom = null; render(); });
+  $('view').querySelectorAll('[data-spare-use]').forEach((b) => b.onclick = (e) => { e.preventDefault(); spareFrom = +b.dataset.spareUse; swapFrom = null; render(); $('swapCard')?.scrollIntoView({ behavior: 'smooth' }); });
+  $('view').querySelectorAll('[data-spare-to]').forEach((b) => b.onclick = () => { const [id, pos] = b.dataset.spareTo.split(':').map(Number); useSpareAt(spareFrom, id, pos); });
+  $('view').querySelectorAll('[data-swap-spare]').forEach((b) => b.onclick = () => {
+    const set = openSets().find((s) => s.questions.some((q) => q.id === swapFrom));
+    useSpareAt(+b.dataset.swapSpare, set.id, set.questions.findIndex((q) => q.id === swapFrom));
+  });
+  $('view').querySelectorAll('[data-swap]').forEach((b) => b.onclick = () => { swapFrom = +b.dataset.swap; spareFrom = null; render(); $('swapCard')?.scrollIntoView({ behavior: 'smooth' }); });
+  $('view').querySelector('[data-swap-cancel]')?.addEventListener('click', () => { swapFrom = null; spareFrom = null; render(); });
   $('view').querySelectorAll('[data-swap-to]').forEach((b) => b.onclick = async () => {
     try {
       await rpc('quiz_admin_swap', { p_pass: pass, p_a: swapFrom, p_b: +b.dataset.swapTo });

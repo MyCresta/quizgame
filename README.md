@@ -56,3 +56,13 @@ marble maze. Try and tune them in Admin → Try it, then "Put this challenge in 
 admin set editor; the public add page only offers the classic types). Outlines in `shapes.js` come from
 Natural Earth 1:50m (public domain). Stored as `quiz_questions.lab` + `meta` (settings plus derived targets
 such as the bean count); answers are scored on the server by `quiz_lab_points`, which mirrors `lab.js` exactly.
+
+## Quick rounds
+`round` type: several mini items in one question (true/false, pick one, match pairs), each item (and each
+matching pair) worth an equal share of 10 000. Written in a small text format (see `rounds.js`), which the
+admin editor uses too. Phones get the items without answers (`quiz_round_public`); answers come back after
+submitting. Ready-made rounds live in `rounds.js` and in Backups → Spare questions.
+
+## Admin
+- "🙈 Hide answers" blurs answers, facts and the editor's answer fields; tap one to peek.
+- "⇄ Move" on a question swaps it with any question in another unplayed set (`quiz_admin_swap`).

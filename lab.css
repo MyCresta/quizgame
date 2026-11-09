@@ -32,3 +32,27 @@ ellipse.lab-real { stroke-width: 1.1; }
 .lab-ghost { fill: none; stroke: #6cb8ff; stroke-width: .8; stroke-dasharray: 2 1.6; }
 .lab-big { font-size: 34px; font-weight: 800; margin: 0; }
 .lab-w { display: grid; gap: 10px; justify-items: center; }
+/* Quick round */
+.rnd-dots { display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
+.rnd-dots span { width: 9px; height: 9px; border-radius: 50%; background: var(--panel-2); }
+.rnd-dots span.done { background: var(--mint); } .rnd-dots span.now { background: var(--accent); }
+.rnd-n { font-size: 13px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; text-align: center; }
+.rnd-q { font-size: 20px; font-weight: 700; text-align: center; margin: 0; line-height: 1.3; max-width: 360px; }
+.rnd-tf { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; max-width: 360px; }
+.rnd-tf .btn { padding: 1.3em; font-size: 18px; }
+.rnd-true { background: var(--mint); color: #062018; } .rnd-false { background: var(--danger); color: #fff; }
+.rnd-opts { display: grid; gap: 8px; width: 100%; max-width: 360px; }
+.rnd-opts.imgs { grid-template-columns: 1fr 1fr; }
+.rnd-opt { border: 2px solid transparent; background: var(--panel-2); color: var(--ink); border-radius: 12px; padding: 14px; font-weight: 600; font-size: 16px; text-align: left; cursor: pointer; line-height: 1.35; }
+.rnd-opts.imgs .rnd-opt { padding: 4px; }
+.rnd-opt img, .rnd-left img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+.rnd-opt.chosen, .btn.chosen { border-color: var(--accent); outline: 3px solid var(--accent); }
+.rnd-opt:disabled { cursor: default; }
+.rnd-match { display: grid; gap: 8px; width: 100%; max-width: 360px; }
+.rnd-row { display: grid; grid-template-columns: .85fr 1.5fr; gap: 8px; align-items: center; font-weight: 600; font-size: 15px; }
+.rnd-row select { font-size: 14px; padding: .65em .6em; }
+.rnd-left img { width: 72px; }
+.rnd-reveal { text-align: left; font-size: 14px; line-height: 1.4; padding-left: 1.3em; margin: 0; display: grid; gap: 8px; width: 100%; }
+.rnd-reveal .ok { color: var(--mint); font-weight: 800; } .rnd-reveal .no { color: var(--danger); font-weight: 800; }
+.rnd-reveal .muted { font-size: 12.5px; }
+.rnd-reveal img { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; vertical-align: middle; }

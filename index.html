@@ -243,7 +243,7 @@
 <script type="module">
 import { CONFIG } from './config.js';
 import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml, rhythmTimeline } from './common.js';
-import { LAB, labAnswer, labScreenPic, drawJar } from './lab.js';
+import { LAB, labAnswer, labScreenPic, drawJar, roundSummary } from './lab.js';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -454,6 +454,15 @@ function renderResults(res) {
     const who = b ? `Closest: <b>${esc(b.player)}</b>` : '';
     const g = b ? guessHtml(q, { guess: b.guess, lat: b.lat, lng: b.lng, json: b.json }) : '';
     if (LAB[q.kind] && q.meta) {
+      if (q.kind === 'round') {
+        const gs = (res.players || []).map((pl) => pl.guesses.find((g) => g.question_id === q.id)?.json).filter(Boolean);
+        return `<div class="r kind-round kind-lab">
+          <div class="rq">${q.position}. ${esc(q.prompt)}</div>
+          <div class="ans num" style="font-size:.6em;line-height:1.25">${gs.length ? roundSummary(q.meta, gs) : `${q.meta.items.length} items`}</div>
+          <div class="best">${b ? `${who} · ${fmtPts(b.points)}` : ''}</div>
+          <div class="fact">${factLine(q)}</div>
+        </div>`;
+      }
       const short = labAnswer(q.kind, q.meta);
       const pic = b?.json && !short ? LAB[q.kind].reveal(q.meta, b.json).replace(/<p class="lab-legend">.*?<\/p>/s, '') : '';
       return `<div class="r kind-${q.kind} kind-lab">

@@ -2,6 +2,7 @@
 // Each challenge has: setup(el, params, onAnswer) to play it, score(params, answer) -> { points, metrics },
 // and reveal(params, answer) -> SVG/HTML that shows the real answer next to yours.
 import { COUNTRIES, FIGURES } from './shapes.js';
+import { ROUNDS, parseRound, isImg } from './rounds.js';
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const pts10k = (f) => Math.max(1, Math.min(10000, Math.round(10000 * f)));
@@ -586,7 +587,95 @@ const maze = {
   reveal(p, a) { return `<p class="lab-big">${a.holes.map((v) => v.toLocaleString('sv-SE')).join(' + ')}</p><p class="lab-legend">The goal at the end is worth 5 000 per marble.</p>`; },
 };
 
-export const LAB = { circle, country, glass, jar, centre, angle, maze };
+// ---------- ⚡ Quick round: true/false, pick one, match pairs ----------
+// meta.items (full, with answers) is kept on the server; phones get a copy without answers until they submit.
+const fullRound = (p) => (p.items ? p : { items: parseRound(ROUNDS[p.preset].text).items });
+const hashSort = (arr, f = (x) => x) => arr.slice().sort((a, b) => { const h = (s) => [...String(f(s))].reduce((x, c) => (x * 31 + c.charCodeAt(0)) >>> 0, 7); return h(a) - h(b); });
+function publicRound(m) {   // same shape the server sends (quiz_round_public)
+  return { items: m.items.map((it) => it.t === 'tf' ? { t: 'tf', text: it.text }
+    : it.t === 'pick' ? { t: 'pick', text: it.text, options: it.answer === undefined ? it.options : hashSort(it.options) }
+    : it.left ? it : { t: 'match', text: it.text, left: it.pairs.map((q) => q[0]), right: hashSort(it.pairs.map((q) => q[1])) }) };
+}
+export function roundScore(m, a) {   // mirror of quiz_round_points
+  let units = 0, ok = 0;
+  m.items.forEach((it, i) => {
+    const p = a?.picks?.[i];
+    if (it.t === 'match') it.pairs.forEach(([, r], j) => { units++; if (Array.isArray(p) && p[j] === r) ok++; });
+    else { units++; if (p === it.answer) ok++; }
+  });
+  return { ok, units, points: units ? Math.max(1, Math.round((10000 * ok) / units)) : 1 };
+}
+const optHtml = (o) => (isImg(o) ? `<img src="${esc(o)}" alt="" loading="lazy">` : esc(o));
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const round = {
+  title: '⚡ Quick round', prompt: (p) => ROUNDS[p.preset]?.prompt || 'Quick round',
+  params: [{ k: 'preset', label: 'Round', def: 'facts', options: Object.fromEntries(Object.entries(ROUNDS).map(([k, v]) => [k, v.name])) }],
+  meta: (p) => fullRound(p),
+  // One item per screen. A tap answers and moves on; there's no going back inside the round, and
+  // opts.progress / onProgress keep answers if you leave and come back.
+  setup(el, p, onAnswer, opts = {}) {
+    const m = publicRound(fullRound(p)), n = m.items.length, picks = (opts.progress || []).slice(0, n);
+    const save = () => opts.onProgress?.(picks.slice());
+    const show = () => {
+      const i = picks.length;
+      const dots = `<div class="rnd-dots">${m.items.map((_, k) => `<span class="${k < i ? 'done' : k === i ? 'now' : ''}"></span>`).join('')}</div>`;
+      if (i >= n) {
+        el.innerHTML = `${dots}<p class="lab-big">All ${n} done ✓</p><p class="lab-hint">Your answers are in. You'll see how you did after you submit.</p>`;
+        onAnswer({ picks: picks.slice() });
+        return;
+      }
+      const it = m.items[i];
+      const head = `${dots}<div class="rnd-n">${i + 1} of ${n}</div><p class="rnd-q">${esc(it.text)}</p>`;
+      const next = (v) => { picks.push(v); save(); setTimeout(show, 260); };
+      if (it.t === 'tf') {
+        el.innerHTML = `${head}<div class="rnd-tf"><button type="button" class="btn rnd-true" data-v="1">✓ True</button><button type="button" class="btn rnd-false" data-v="0">✗ False</button></div>`;
+        el.querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { b.classList.add('chosen'); el.querySelectorAll('[data-v]').forEach((x) => { x.disabled = true; }); next(b.dataset.v === '1'); });
+      } else if (it.t === 'pick') {
+        const imgs = it.options.some(isImg);
+        el.innerHTML = `${head}<div class="rnd-opts ${imgs ? 'imgs' : ''}">${it.options.map((o, k) => `<button type="button" class="rnd-opt" data-k="${k}">${optHtml(o)}</button>`).join('')}</div>`;
+        el.querySelectorAll('[data-k]').forEach((b) => b.onclick = () => { b.classList.add('chosen'); el.querySelectorAll('[data-k]').forEach((x) => { x.disabled = true; }); next(it.options[+b.dataset.k]); });
+      } else {
+        el.innerHTML = `${head}<div class="rnd-match">${it.left.map((l, k) => `<label class="rnd-row"><span class="rnd-left">${optHtml(l)}</span>
+          <select class="input" data-k="${k}"><option value="">Choose…</option>${it.right.map((r) => `<option>${esc(r)}</option>`).join('')}</select></label>`).join('')}</div>
+          <p class="lab-hint">Each right answer counts. You can't change them after pressing Done.</p>
+          <button type="button" class="btn block" data-a="done" disabled>Done →</button>`;
+        const sels = [...el.querySelectorAll('select')], done = el.querySelector('[data-a="done"]');
+        sels.forEach((s) => s.onchange = () => { done.disabled = sels.some((x) => !x.value); });
+        done.onclick = () => { done.disabled = true; next(sels.map((x) => x.value)); };
+      }
+    };
+    show();
+  },
+  score(p, a) {
+    const r = roundScore(fullRound(p), a);
+    return { points: r.points, metrics: { 'Right': `${r.ok} of ${r.units}` } };
+  },
+  reveal(p, a) {
+    const m = fullRound(p);
+    if (!m.items?.[0] || !('answer' in m.items[0] || m.items[0].pairs)) return '';
+    const yes = (b) => `<span class="${b ? 'ok' : 'no'}">${b ? '✓' : '✗'}</span>`;
+    return `<ol class="rnd-reveal">${m.items.map((it, i) => {
+      const pk = a?.picks?.[i];
+      if (it.t === 'match') return `<li><b>${esc(it.text)}</b>${it.pairs.map(([l, r], j) => `<div>${yes(Array.isArray(pk) && pk[j] === r)} ${optHtml(l)} → <b>${esc(r)}</b>${Array.isArray(pk) && pk[j] !== r ? ` <span class="muted">(you: ${esc(pk[j])})</span>` : ''}</div>`).join('')}${it.note ? `<div class="muted">${esc(it.note)}</div>` : ''}</li>`;
+      const right = it.t === 'tf' ? (it.answer ? 'True' : 'False') : it.answer;
+      return `<li>${yes(pk === it.answer)} ${esc(it.text)} <b>${it.t === 'tf' ? right : optHtml(right)}</b>${it.note ? `<div class="muted">${esc(it.note)}</div>` : ''}</li>`;
+    }).join('')}</ol>`;
+  },
+};
+// For the office screen: how everyone did on each item, and the hardest one.
+export function roundSummary(m, guesses) {
+  if (!m?.items?.length) return '';
+  const stats = m.items.map((it, i) => {
+    let ok = 0, tot = 0;
+    guesses.forEach((g) => { const r = roundScore({ items: [it] }, { picks: [g?.picks?.[i]] }); ok += r.ok; tot += r.units; });
+    return { it, share: tot ? ok / tot : 0 };
+  });
+  const hard = stats.slice().sort((x, y) => x.share - y.share)[0];
+  const right = hard.it.t === 'tf' ? (hard.it.answer ? 'true' : 'false') : hard.it.t === 'pick' ? hard.it.answer : '';
+  return `Hardest: “${esc(hard.it.text)}”${right && !isImg(right) ? ` (${esc(right)})` : ''}, ${Math.round(hard.share * 100)} % got it`;
+}
+
+export const LAB = { circle, country, glass, jar, centre, angle, maze, round };
 
 // Short correct answer for the office screen (null = show the picture reveal instead).
 export function labAnswer(kind, m) {

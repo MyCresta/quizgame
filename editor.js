@@ -2,6 +2,7 @@
 import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js';
 import { createColorPicker, hexToRgb, createRecorder, syllables } from './widgets.js';
 import { LAB } from './lab.js';
+import { ROUNDS, parseRound, roundToText } from './rounds.js';
 export const LAB_KINDS = Object.entries(LAB).map(([k, c]) => [k, c.title]);
 
 export const SCORING = [
@@ -109,7 +110,13 @@ function block(uid, i, kinds) {
       <div class="actions" style="display:flex;gap:8px"><button type="button" class="btn ghost" data-f="additem" style="padding:.6em 1em">＋ Item</button><button type="button" class="btn ghost" data-f="delitem" style="padding:.6em 1em">− Item</button></div>
     </div>
 
-    ${kinds.filter(([k]) => LAB[k]).map(([k]) => `<div data-part="${k}" class="hidden" style="display:grid;gap:12px">
+    ${kinds.some(([k]) => k === 'round') ? `<div data-part="round" class="hidden" style="display:grid;gap:12px">
+      <label class="field"><span>Start from a ready-made round (replaces the items below)</span><select class="input" data-f="roundpreset"><option value="">Choose…</option>${Object.entries(ROUNDS).map(([k, r]) => `<option value="${k}">${esc(r.name)}</option>`).join('')}</select></label>
+      <label class="field"><span>Items</span><textarea class="input" data-f="roundtext" rows="14" spellcheck="false" style="font-family:var(--mono);font-size:13px" placeholder="TRUE: Wombat poop is cube-shaped.\n> A note shown after answering\n\n? Which headline is real?\n* The real one\n- A fake one\n\nMATCH: Match the person to the name\nhttps://…/photo1.jpg = Anna\nhttps://…/photo2.jpg = Bo"></textarea></label>
+      <div class="hint"><b>TRUE:</b> / <b>FALSE:</b> a statement · <b>?</b> a question, then <b>*</b> the right option and <b>-</b> wrong ones · <b>MATCH:</b> then <b>left = right</b> per line · <b>&gt;</b> a note shown afterwards. Options and the left side can be image links (https://…). Every item, and every matching pair, is worth the same share of 10 000.</div>
+      <div class="error" data-f="rounderr"></div>
+    </div>` : ''}
+    ${kinds.filter(([k]) => LAB[k] && k !== 'round').map(([k]) => `<div data-part="${k}" class="hidden" style="display:grid;gap:12px">
       ${LAB[k].params.map((x) => `<label class="field"><span>${esc(x.label)}</span>${x.options
         ? `<select class="input" data-lp="${x.k}">${Object.entries(x.options).map(([v, n]) => `<option value="${v}"${v === x.def ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`
         : `<input class="input num" type="number" step="${x.step}" data-lp="${x.k}" value="${x.def}">`}</label>`).join('')}
@@ -310,6 +317,16 @@ export function createSetEditor(root, { toast = alert, onChange = () => {}, lab 
     f(i, 'delitem').onclick = () => { const v = itemInputs(i).map((x) => x.value); if (v.length > 3) setItems(i, v.slice(0, -1)); onChange(); };
     ['prompt', 'label', 'fact', 'source'].forEach((n) => f(i, n).addEventListener('input', onChange));
     card(i).querySelectorAll('[data-lp]').forEach((el) => el.addEventListener('input', () => { updateLabPrompt(i); onChange(); }));
+    if (kinds.some(([k]) => k === 'round')) {
+      const check = () => { const r = parseRound(f(i, 'roundtext').value); f(i, 'rounderr').textContent = f(i, 'roundtext').value.trim() ? r.errors.slice(0, 3).join(' · ') : ''; };
+      f(i, 'roundtext').addEventListener('input', () => { check(); onChange(); });
+      f(i, 'roundpreset').addEventListener('change', () => {
+        const r = ROUNDS[f(i, 'roundpreset').value]; if (!r) return;
+        f(i, 'roundtext').value = r.text; check();
+        const p = f(i, 'prompt'); if (!p.value.trim() || p.value === state[i].autoPrompt) { p.value = r.prompt; state[i].autoPrompt = r.prompt; }
+        onChange();
+      });
+    }
     f(i, 'imgurl').addEventListener('input', () => checkImage(i));
     f(i, 'go').onclick = () => search(i);
     f(i, 'search').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); search(i); } };
@@ -349,6 +366,11 @@ export function createSetEditor(root, { toast = alert, onChange = () => {}, lab 
       if (imageUrl) extras.image_url = imageUrl;
       if (extras.source_url && !/^https?:\/\//i.test(extras.source_url)) throw new Error(`Question ${n}: the source should be a web link (https://…)`);
 
+      if (k === 'round') {
+        const r = parseRound(f(i, 'roundtext').value);
+        if (r.errors.length) throw new Error(`Question ${n}: ${r.errors[0]}`);
+        return { kind: k, prompt, meta: { items: r.items }, ...extras };
+      }
       if (LAB[k]) return { kind: k, prompt, meta: LAB[k].meta(labParams(i)), ...extras };
       if (k === 'map') {
         if (state[i].lat === null) throw new Error(`Question ${n}: tap the map to set the correct spot`);
@@ -442,6 +464,8 @@ export function createSetEditor(root, { toast = alert, onChange = () => {}, lab 
         f(i, 'coltol').value = String(nearest(COLOR_TOL, q.tolerance));
       } else if (q.kind === 'order') {
         setItems(i, q.items || ['', '', '']);
+      } else if (q.kind === 'round' && q.meta) {
+        f(i, 'roundtext').value = roundToText(q.meta);
       } else if (LAB[q.kind] && q.meta) {
         part(i, q.kind).querySelectorAll('[data-lp]').forEach((el) => { if (q.meta[el.dataset.lp] != null) el.value = q.meta[el.dataset.lp]; });
         state[i].autoPrompt = LAB[q.kind].prompt(labParams(i));

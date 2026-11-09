@@ -72,13 +72,26 @@
 .lab-settings, .lab-raw { margin-top: 14px; } .lab-settings summary, .lab-raw summary { cursor: pointer; color: var(--muted); font-weight: 700; }
 .lab-settings .field { margin: 10px 0; }
 .lab-raw pre { white-space: pre-wrap; word-break: break-all; font-size: 11px; color: var(--muted); max-height: 160px; overflow: auto; }
+/* Spoiler toggle: answers blurred until you tap them */
+.spoil-btn { border: 0; background: var(--panel-2); color: var(--ink); border-radius: 999px; padding: 6px 12px; font-weight: 700; cursor: pointer; font-size: 13px; }
+.no-spoilers .set .ans, .no-spoilers .set .sub, .no-spoilers .set .players, .no-spoilers .use-set .ans,
+.no-spoilers #editor [data-part], .no-spoilers #editor [data-f="more"], .no-spoilers #preview { filter: blur(8px); cursor: pointer; transition: filter .15s; user-select: none; }
+.no-spoilers .peek, .no-spoilers .peek [data-part], .no-spoilers .peek [data-f="more"] { filter: none !important; user-select: auto; }
+.no-spoilers #editor .card:not(.peek) [data-part] * , .no-spoilers #editor .card:not(.peek) [data-f="more"] * { pointer-events: none; }
+.peek-hint { display: none; font-size: 13px; color: var(--muted); }
+.no-spoilers .peek-hint { display: block; }
+/* Moving questions */
+.set li { position: relative; }
+.swap-btn { border: 0; background: var(--panel-2); color: var(--muted); border-radius: 8px; padding: 2px 8px; font-size: 12px; cursor: pointer; margin-left: 6px; }
+.swap-card { border: 2px solid var(--accent); }
+.swap-card .use-q.from { outline: 2px dashed var(--accent); opacity: .6; cursor: default; }
 </style>
 </head>
 <body>
 <div class="app">
   <div class="top">
     <div class="logo" id="logo"></div>
-    <div style="display:flex;gap:14px;align-items:center"><a href="index.html">Screen</a><a href="add.html">Add set</a><a href="#" id="logout" class="hidden">Log out</a></div>
+    <div style="display:flex;gap:14px;align-items:center"><button type="button" class="spoil-btn" id="spoilBtn"></button><a href="index.html">Screen</a><a href="add.html">Add set</a><a href="#" id="logout" class="hidden">Log out</a></div>
   </div>
 
   <div id="login" class="card hidden">
@@ -98,6 +111,7 @@
       <p class="hint" id="editHint"></p>
       <label class="field"><span>Author</span><input class="input" id="editAuthor" maxlength="40"></label>
       <label class="check"><input type="checkbox" id="editBackup"> Backup set (only used when the queue is empty)</label>
+      <p class="peek-hint">🙈 Answers are hidden. Tap a blurred area to show that question's answers.</p>
     </div>
     <div id="editor" style="display:grid;gap:18px"></div>
     <div class="editbar"><button class="btn ghost" id="cancelEdit">Cancel</button><button class="btn" id="saveEdit">Save</button></div>
@@ -169,7 +183,8 @@ function answerText(q) {
 }
 
 function setCard(s, opts) {
-  const qs = s.questions.map((q) => `<li>${esc(q.prompt)}<br><span class="ans">${answerText(q)}</span>
+  const movable = !s.play_date && !s.played;
+  const qs = s.questions.map((q) => `<li>${esc(q.prompt)}${movable ? `<button type="button" class="swap-btn" data-swap="${q.id}" title="Swap with a question in another set">⇄ Move</button>` : ''}<br><span class="ans">${answerText(q)}</span>
     ${q.fact ? `<span class="sub"> · ${esc(q.fact)}</span>` : ''}${q.source_url ? ` <a class="sub" href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : ''}${q.image_url ? ' <span class="sub">· 🖼 image</span>' : ''}</li>`).join('');
   return `<div class="set" data-id="${s.id}">
     <div class="head"><b>${opts.title}</b><span class="meta">${opts.meta || ''}</span></div>
@@ -247,9 +262,49 @@ function render() {
       <label class="field"><span>New password (at least 8 characters)</span><input class="input" id="newPass" type="password" autocomplete="new-password"></label>
       <button class="btn" id="savePass">Save password</button></div>`;
   }
+  if (swapFrom && (tab === 'queue' || tab === 'backups')) html = swapPicker() + html;
   $('view').innerHTML = html;
   bindActions();
+  bindSwap();
+  bindPeek();
 }
+
+// ---------- Moving questions between sets ----------
+let swapFrom = null;   // id of the question being moved
+function swapPicker() {
+  const sets = [...data.queue, ...data.backups.filter((s) => !s.played)];
+  const from = sets.flatMap((s) => s.questions).find((q) => q.id === swapFrom);
+  if (!from) { swapFrom = null; return ''; }
+  return `<div class="card swap-card" id="swapCard"><h2>Move “${esc(from.prompt)}”</h2>
+    <p class="hint">Pick the question to swap places with. It can be in another set or the same set, in the queue or in the backups.</p>
+    ${sets.map((s) => `<div class="use-set"><div class="use-head"><b>${s.is_backup ? 'Backup' : s.expected_date ? fmtDate(s.expected_date, { weekday: 'short', day: 'numeric', month: 'short' }) : 'Queued'}</b> · ${esc(s.author)}</div>
+      ${s.questions.map((q, k) => `<button type="button" class="use-q ${q.id === swapFrom ? 'from' : ''}" data-swap-to="${q.id}" ${q.id === swapFrom ? 'disabled' : ''}>${k + 1}. ${KIND_ICON[q.kind] || '❓'} ${esc(q.prompt)}</button>`).join('')}</div>`).join('')}
+    <div class="actions"><button data-swap-cancel>Cancel</button></div></div>`;
+}
+function bindSwap() {
+  $('view').querySelectorAll('[data-swap]').forEach((b) => b.onclick = () => { swapFrom = +b.dataset.swap; render(); $('swapCard')?.scrollIntoView({ behavior: 'smooth' }); });
+  $('view').querySelector('[data-swap-cancel]')?.addEventListener('click', () => { swapFrom = null; render(); });
+  $('view').querySelectorAll('[data-swap-to]').forEach((b) => b.onclick = async () => {
+    try {
+      await rpc('quiz_admin_swap', { p_pass: pass, p_a: swapFrom, p_b: +b.dataset.swapTo });
+      swapFrom = null; toast('Swapped', true); await load();
+    } catch (e) { toast(e.message); }
+  });
+}
+
+// ---------- Spoilers ----------
+let spoilers = true;
+try { spoilers = localStorage.getItem('bp_admin_spoilers') !== 'off'; } catch { /* default on */ }
+function applySpoilers() {
+  document.body.classList.toggle('no-spoilers', !spoilers);
+  $('spoilBtn').textContent = spoilers ? '🙈 Hide answers' : '👀 Answers hidden';
+  $('spoilBtn').title = spoilers ? 'Blur answers so you can manage sets without spoilers' : 'Answers are blurred: tap one to peek, or tap here to show all';
+}
+$('spoilBtn').onclick = () => { spoilers = !spoilers; try { localStorage.setItem('bp_admin_spoilers', spoilers ? 'on' : 'off'); } catch { /* ignore */ } applySpoilers(); };
+function bindPeek() {   // tap a blurred answer to see just that one
+  document.querySelectorAll('.set .ans, .set .sub, .set .players, .use-set .ans').forEach((el) => el.addEventListener('click', () => { if (!spoilers) el.classList.toggle('peek'); }));
+}
+applySpoilers();
 
 function findSet(id) {
   return [...data.queue, ...data.backups, ...data.days].find((s) => s.id === id);
@@ -498,6 +553,12 @@ function openEditor(set, backup, preload = null) {
   if (set) editor.load(set.questions);
   else if (preload) editor.load(preload);
 }
+// With answers hidden, tapping a blurred area of a question in the editor shows that question's answers.
+$('editor').addEventListener('click', (e) => {
+  if (spoilers) return;
+  const card = e.target.closest('#editor > .card');
+  if (card && !card.classList.contains('peek') && e.target.closest('[data-part], [data-f="more"]')) { card.classList.add('peek'); e.preventDefault(); }
+}, true);
 $('cancelEdit').onclick = () => show('main');
 $('saveEdit').onclick = async () => {
   try {

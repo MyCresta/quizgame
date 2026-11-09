@@ -183,7 +183,7 @@ async function viewDone(result) {
     const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';
     const tl = Array.isArray(p.ref) && Array.isArray(p.taps)
       ? `<div style="margin-top:6px">${rhythmTimeline(p.ref, p.taps)}<div class="muted" style="font-size:13px">${rhythmVerdict(p.ref, p.taps)} · orange = the real rhythm, green = your taps</div></div>` : '';
-    const lab = q && LAB[q.kind] && result.lab?.[q.id] ? `<div class="lab-w" style="margin-top:6px">${LAB[q.kind].reveal(q.meta, result.lab[q.id])}</div>` : '';
+    const lab = q && LAB[q.kind] && result.lab?.[q.id] ? `<div class="lab-w" style="margin-top:6px">${LAB[q.kind].reveal(p.meta || q.meta, result.lab[q.id])}</div>` : '';
     if (lab) return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${lab}</div>`;
     return `<div class="line" style="${tl ? 'display:grid' : ''}"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${tl}</div>`;
   }).join('');
@@ -218,11 +218,12 @@ function answerText(q) {
     case 'glass': return '🍸 Poured ✓';
     case 'centre': return '🎯 Placed ✓';
     case 'angle': return '📐 Tilted ✓';
+    case 'round': return `⚡ Done (${a.lab.picks.length} item${a.lab.picks.length === 1 ? '' : 's'})`;
     default: return `${fmt(a.value)}${q.unit ? ` ${esc(q.unit)}` : ''}`;
   }
 }
 
-const NEED = { circle: 'Draw it first', country: 'Draw it first', glass: 'Pour the glass first', jar: 'Type your guess first', centre: 'Tap where it balances first', angle: 'Tilt it first', maze: 'Roll both marbles first', map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', tempo: 'Tap the rhythm, then press Lock in', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
+const NEED = { round: 'Finish the round first', circle: 'Draw it first', country: 'Draw it first', glass: 'Pour the glass first', jar: 'Type your guess first', centre: 'Tap where it balances first', angle: 'Tilt it first', maze: 'Roll both marbles first', map: 'Drop a pin on the map first', percent: 'Move the slider first', time: 'Start and stop the clock first', tempo: 'Tap the rhythm, then press Lock in', color: 'Pick a colour first', order: 'Put the items in order first', number: 'Enter a number first' };
 
 function viewQuestion(i) {
   labCleanup?.(); labCleanup = null;
@@ -257,7 +258,7 @@ function viewQuestion(i) {
     labCleanup = LAB[q.kind].setup($('w'), q.meta, (ans) => {
       if (ans) answers[q.id] = { lab: ans }; else delete answers[q.id];
       saveDraft();
-    }, { live: true, prev: a?.lab, progress: answers[`maze-${q.id}`], onProgress: (r) => { answers[`maze-${q.id}`] = r; saveDraft(); } }) || null;
+    }, { live: true, prev: a?.lab, progress: answers[`prog-${q.id}`] || answers[`maze-${q.id}`], onProgress: (r) => { answers[`prog-${q.id}`] = r; saveDraft(); } }) || null;
   } else if (q.kind === 'map') {
     if (typeof L === 'undefined') { $('maphint').innerHTML = '<span class="error">The map failed to load. Check your connection and reload.</span>'; }
     else {

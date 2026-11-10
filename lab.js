@@ -506,10 +506,11 @@ const maze = {
       const shrink = () => { ball.fall -= 0.08; draw(); if (ball.fall > 0) raf = requestAnimationFrame(shrink); else finish(value, goal); };
       shrink();
     }
+    const showRow = (on) => { row.style.display = on ? '' : 'none'; };   // (.tmp-row's CSS display overrides [hidden])
     function showState() {   // buttons and text between rolls
-      row.hidden = false; go.disabled = false;
+      showRow(true); go.disabled = false;
       if (results.length >= 2) {
-        row.hidden = true;
+        showRow(false); go.disabled = true;
         msg.innerHTML = `<b>Marble 1: ${fmtV(results[0])} · Marble 2: ${fmtV(results[1])}</b>`;
         return;
       }
@@ -535,9 +536,9 @@ const maze = {
         return;
       }
       results[results.length - 1] = value;
-      opts.onProgress?.(results.slice());
+      opts.onProgress?.(results.slice(0, 2));
       showState();
-      if (results.length >= 2) onAnswer({ holes: results.slice() });
+      if (results.length >= 2) onAnswer({ holes: results.slice(0, 2) });
     }
     function step(now) {
       const dt = Math.min(0.04, (now - last) / 1000); last = now;
@@ -567,8 +568,9 @@ const maze = {
     }
     go.onclick = async () => {
       try { if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch { /* fall back to touch */ }
+      if (!lv.practice && results.length >= 2) return;   // two marbles, never a third
       if (!lv.practice) { results.push(0); opts.onProgress?.(results.slice()); }   // counts as 0 unless it finishes
-      base = null; row.hidden = true;
+      base = null; showRow(false);
       msg.textContent = lv.practice ? 'Tilt to roll into the green hole!' : `Marble ${results.length} of 2. Tilt to roll!`;
       ball = { x: lv.start[0], y: lv.start[1], vx: 0, vy: 0 };
       last = t0 = performance.now();
@@ -577,14 +579,14 @@ const maze = {
     };
     skip.onclick = () => { lv = REAL; draw(); showState(); };
     showState(); draw();
-    if (results.length >= 2) onAnswer({ holes: results.slice() });
+    if (results.length >= 2) onAnswer({ holes: results.slice(0, 2) });
     return () => { cancelAnimationFrame(raf); window.removeEventListener('deviceorientation', onOri); window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); };
   },
   score(p, a) {
-    const ok = a.holes.every((v) => MAZE_VALUES.includes(v));
-    return { points: ok ? Math.max(1, a.holes[0] + a.holes[1]) : 1, metrics: { 'Marble 1': a.holes[0].toLocaleString('sv-SE'), 'Marble 2': a.holes[1].toLocaleString('sv-SE') } };
+    const h = (a.holes || []).slice(0, 2), ok = h.length === 2 && h.every((v) => MAZE_VALUES.includes(v));   // only the first two marbles count
+    return { points: ok ? Math.max(1, h[0] + h[1]) : 1, metrics: { 'Marble 1': a.holes[0].toLocaleString('sv-SE'), 'Marble 2': a.holes[1].toLocaleString('sv-SE') } };
   },
-  reveal(p, a) { return `<p class="lab-big">${a.holes.map((v) => v.toLocaleString('sv-SE')).join(' + ')}</p><p class="lab-legend">The goal at the end is worth 5 000 per marble.</p>`; },
+  reveal(p, a) { return `<p class="lab-big">${a.holes.slice(0, 2).map((v) => v.toLocaleString('sv-SE')).join(' + ')}</p><p class="lab-legend">The goal at the end is worth 5 000 per marble.</p>`; },
 };
 
 // ---------- ⚡ Quick round: true/false, pick one, match pairs ----------

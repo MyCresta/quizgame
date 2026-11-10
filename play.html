@@ -213,7 +213,7 @@ function answerText(q) {
     case 'color': return `${swatchHtml(a.color)} Colour picked`;
     case 'order': return a.order.map((it, i) => `${i + 1}. ${esc(it)}`).join('&nbsp; ');
     case 'jar': return `${fmt(a.lab.value)} beans`;
-    case 'maze': return `🟢 ${a.lab.holes.map((v) => fmt(v)).join(' + ')}`;
+    case 'maze': return `🟢 ${a.lab.holes.slice(0, 2).map((v) => fmt(v)).join(' + ')}`;
     case 'circle': case 'country': return '✏️ Drawn ✓';
     case 'glass': return '🍸 Poured ✓';
     case 'centre': return '🎯 Placed ✓';

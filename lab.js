@@ -88,6 +88,8 @@ function drawPad(el, onAnswer, { maxTries = Infinity, prev = null } = {}) {
     : `Draw in one stroke without lifting your finger. ${used ? `Try ${used} of ${maxTries}: draw again to replace it.` : `You get up to ${maxTries} tries; the last one counts.`}`;
   el.innerHTML = `<svg class="lab-pad" viewBox="0 0 100 100"><path class="lab-ink" d="${shown ? pathD(shown, true) : ''}"/></svg><p class="lab-hint">${hint()}</p>`;
   const svg = el.querySelector('svg'), ink = el.querySelector('.lab-ink'), msg = el.querySelector('.lab-hint');
+  const live = () => svg.classList.toggle('lab-live', used < maxTries);   // no tries left = the page scrolls normally
+  live();
   let pts = null;
   svg.addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -105,7 +107,7 @@ function drawPad(el, onAnswer, { maxTries = Infinity, prev = null } = {}) {
     if (done.length < 8) { ink.setAttribute('d', shown ? pathD(shown, true) : ''); return; }   // a tap or a slip doesn't use up a try
     const keep = done.length > 200 ? done.filter((_, k) => k % Math.ceil(done.length / 200) === 0 || k === done.length - 1) : done;
     shown = keep.map((p) => [r2(p[0]), r2(p[1])]); used++;
-    ink.setAttribute('d', pathD(shown, true)); msg.innerHTML = hint();
+    ink.setAttribute('d', pathD(shown, true)); msg.innerHTML = hint(); live();
     onAnswer({ pts: shown, tries: used });
   };
   svg.addEventListener('pointerup', end); svg.addEventListener('pointercancel', end);
@@ -212,7 +214,7 @@ const glass = {
   ],
   setup(el, p, onAnswer, opts = {}) {
     const g = GLASSES[p.glass], h0 = opts.prev?.level;
-    el.innerHTML = `<div class="lab-stage">${glassSvg(g, h0 == null ? [] : [{ h: h0, fill: true, line: 'lab-level' }])}</div><p class="lab-hint">Touch the glass and drag up or down to pour.</p>`;
+    el.innerHTML = `<div class="lab-stage lab-live">${glassSvg(g, h0 == null ? [] : [{ h: h0, fill: true, line: 'lab-level' }])}</div><p class="lab-hint">Touch the glass and drag up or down to pour.</p>`;
     const stage = el.querySelector('.lab-stage');
     let down = false;
     const set = (e) => {
@@ -341,8 +343,7 @@ const centre = {
     el.innerHTML = `<svg class="lab-pad" viewBox="0 0 100 100"><path class="lab-shape" d="${pathD(poly, true)}"/><g class="lab-mark" ${pv ? `transform="translate(${pv.x},${pv.y})"` : 'style="display:none"'}><circle r="2.6"/><path d="M-5,0H5M0,-5V5"/></g></svg>
       <p class="lab-hint">Imagine the shape cut out of cardboard. Where would it balance on a pin? Tap to place, tap again to move.</p>`;
     const svg = el.querySelector('svg'), mark = el.querySelector('.lab-mark');
-    svg.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
+    svg.addEventListener('click', (e) => {
       const [x, y] = svgPoint(svg, e);
       mark.style.display = ''; mark.setAttribute('transform', `translate(${r2(x)},${r2(y)})`);
       onAnswer({ x: r2(x), y: r2(y) });
@@ -389,7 +390,7 @@ const angle = {
     const A = ANGLES[p.preset];
     let deg = opts.prev?.deg ?? 0;
     const paint = () => { el.querySelector('.lab-stage').innerHTML = angleSvg(A.look, A.from, deg); };
-    el.innerHTML = '<div class="lab-stage"></div><p class="lab-hint">Drag sideways anywhere on the picture to tilt it.</p>';
+    el.innerHTML = '<div class="lab-stage lab-pan-y"></div><p class="lab-hint">Drag sideways anywhere on the picture to tilt it.</p>';
     paint();
     const stage = el.querySelector('.lab-stage');
     let start = null;
@@ -527,7 +528,7 @@ const maze = {
       }
     }
     function finish(value, goal) {
-      ball = null; draw();
+      ball = null; draw(); cv.classList.remove('lab-live');
       navigator.vibrate?.(60);
       if (lv.practice) {
         showState();
@@ -570,7 +571,7 @@ const maze = {
       try { if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch { /* fall back to touch */ }
       if (!lv.practice && results.length >= 2) return;   // two marbles, never a third
       if (!lv.practice) { results.push(0); opts.onProgress?.(results.slice()); }   // counts as 0 unless it finishes
-      base = null; showRow(false);
+      base = null; showRow(false); cv.classList.add('lab-live');
       msg.textContent = lv.practice ? 'Tilt to roll into the green hole!' : `Marble ${results.length} of 2. Tilt to roll!`;
       ball = { x: lv.start[0], y: lv.start[1], vx: 0, vy: 0 };
       last = t0 = performance.now();

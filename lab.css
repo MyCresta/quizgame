@@ -1,6 +1,6 @@
 /* New challenge types (lab.js): shared by the phone, the office screen and admin. */
-.lab-pad { width: 100%; max-width: 380px; aspect-ratio: 1; background: var(--panel-2); border-radius: 16px; touch-action: none; display: block; }
-.lab-stage { width: 100%; max-width: 380px; touch-action: none; }
+.lab-pad { width: 100%; max-width: 380px; aspect-ratio: 1; background: var(--panel-2); border-radius: 16px; display: block; }
+.lab-stage { width: 100%; max-width: 380px; }
 .lab-ink { fill: rgba(255,122,61,.08); stroke: var(--accent); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
 .lab-real { fill: none; stroke: #6cb8ff; stroke-width: 1; stroke-dasharray: 2.5 2; }
 .lab-real.fill { fill: rgba(108,184,255,.15); }
@@ -15,7 +15,7 @@ ellipse.lab-level { fill: none; stroke: var(--accent); stroke-width: 1.1; }
 ellipse.lab-real { stroke-width: 1.1; }
 .lab-level { stroke: var(--accent); stroke-width: 1; }
 .lab-jar { width: 100%; max-width: 380px; height: auto; background: var(--panel-2); border-radius: 16px; }
-.lab-maze { width: 100%; max-width: 360px; height: auto; border-radius: 14px; touch-action: none; }
+.lab-maze { width: 100%; max-width: 360px; height: auto; border-radius: 14px; }
 .lab-num { font-size: 24px; text-align: center; }
 .lab-shape { fill: var(--mint); fill-opacity: .8; stroke: #062018; stroke-width: .4; fill-rule: evenodd; }
 .lab-mark { stroke: var(--accent); stroke-width: 1.2; fill: none; }
@@ -56,3 +56,7 @@ ellipse.lab-real { stroke-width: 1.1; }
 .rnd-reveal .ok { color: var(--mint); font-weight: 800; } .rnd-reveal .no { color: var(--danger); font-weight: 800; }
 .rnd-reveal .muted { font-size: 12.5px; }
 .rnd-reveal img { width: 36px; height: 36px; object-fit: cover; border-radius: 6px; vertical-align: middle; }
+/* Only block page scrolling while a challenge actually needs the finger (drawing, pouring, rolling).
+   Everywhere else, including results and finished challenges, dragging scrolls the page as normal. */
+.lab-live { touch-action: none; }
+.lab-pan-y { touch-action: pan-y; }   /* sideways drags go to the challenge, up/down still scrolls */

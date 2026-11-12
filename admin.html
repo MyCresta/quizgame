@@ -85,6 +85,10 @@
 .swap-btn { border: 0; background: var(--panel-2); color: var(--muted); border-radius: 8px; padding: 2px 8px; font-size: 12px; cursor: pointer; margin-left: 6px; }
 .swap-card { border: 2px solid var(--accent); }
 .swap-card .use-q.from { outline: 2px dashed var(--accent); opacity: .6; cursor: default; }
+.rnd-items { margin: 6px 0 2px; font-size: 14px; }
+.rnd-items summary { cursor: pointer; color: var(--mint); font-weight: 700; }
+.rnd-items ol { margin: 6px 0; padding-left: 1.4em; display: grid; gap: 4px; }
+.rnd-items ul { margin: 2px 0; padding-left: 1.1em; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -169,6 +173,18 @@ async function load() {
   render();
 }
 
+// A quick round's statements and options, without saying which are right (never blurred).
+function roundItems(q) {
+  const items = q.kind === 'round' ? q.meta?.items : null;
+  if (!items?.length) return '';
+  const abc = (a) => a.slice().sort((x, y) => String(x).localeCompare(String(y), 'sv'));
+  const opt = (o) => (/^https:\/\//.test(o) ? `<img src="${esc(o)}" alt="" style="width:34px;height:34px;object-fit:cover;border-radius:5px;vertical-align:middle">` : esc(o));
+  return `<details class="rnd-items" onclick="event.stopPropagation()"><summary>Show the ${items.length} item${items.length === 1 ? '' : 's'} (no answers)</summary><ol>${items.map((it) =>
+    it.t === 'tf' ? `<li>${esc(it.text)}</li>`
+    : it.t === 'pick' ? `<li>${esc(it.text)}<ul>${abc(it.options).map((o) => `<li>${opt(o)}</li>`).join('')}</ul></li>`
+    : `<li>${esc(it.text)}<div class="muted">${abc(it.pairs.map((x) => x[0])).map(opt).join(' · ')}<br>↔ ${abc(it.pairs.map((x) => x[1])).map(opt).join(' · ')}</div></li>`).join('')}</ol></details>`;
+}
+
 function answerText(q) {
   if (LAB[q.kind]) return `${LAB[q.kind].title}${q.meta ? ` · ${esc(labAnswer(q.kind, q.meta) || q.meta.country || q.meta.shape || '')}` : ''}`;
   switch (q.kind) {
@@ -184,7 +200,7 @@ function answerText(q) {
 
 function setCard(s, opts) {
   const movable = !s.play_date && !s.played;
-  const qs = s.questions.map((q) => `<li>${esc(q.prompt)}${movable ? `<button type="button" class="swap-btn" data-swap="${q.id}" title="Swap with a question in another set">⇄ Move</button>` : ''}<br><span class="ans">${answerText(q)}</span>
+  const qs = s.questions.map((q) => `<li>${esc(q.prompt)}${movable ? `<button type="button" class="swap-btn" data-swap="${q.id}" title="Swap with a question in another set">⇄ Move</button>` : ''}<br><span class="ans">${answerText(q)}</span>${roundItems(q)}
     ${q.fact ? `<span class="sub"> · ${esc(q.fact)}</span>` : ''}${q.source_url ? ` <a class="sub" href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : ''}${q.image_url ? ' <span class="sub">· 🖼 image</span>' : ''}</li>`).join('');
   return `<div class="set" data-id="${s.id}">
     <div class="head"><b>${opts.title}</b><span class="meta">${opts.meta || ''}</span></div>
@@ -250,7 +266,7 @@ function render() {
       (data.spares?.length ? `<div class="set" id="spareCard"><div class="head"><b>Spare questions</b><span class="meta">${data.spares.length} waiting</span></div>
         <p class="hint">Questions that aren't in a set. Put one into a set (the question it replaces becomes a spare), or tick up to three and make them into a backup set.</p>
         <ol style="list-style:none;padding:0">${data.spares.map((sp) => `<li><label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer"><input type="checkbox" class="spare-pick" value="${sp.id}" style="margin-top:4px">
-          <span>${esc(sp.question.prompt)}<button type="button" class="swap-btn" data-spare-use="${sp.id}">⇄ Put in a set</button><br><span class="ans">${answerText(sp.question)}</span>${sp.note ? `<span class="sub"> · ${esc(sp.note)}</span>` : ''}</span></label></li>`).join('')}</ol>
+          <span>${esc(sp.question.prompt)}<button type="button" class="swap-btn" data-spare-use="${sp.id}">⇄ Put in a set</button><br><span class="ans">${answerText(sp.question)}</span>${sp.note ? `<span class="sub"> · ${esc(sp.note)}</span>` : ''}${roundItems(sp.question)}</span></label></li>`).join('')}</ol>
         <div class="actions"><button data-a="spare-set">Make a backup set from the ticked ones</button></div></div>` : '') +
       (data.backups.length ? data.backups.map((s) => setCard(s, {
         title: esc(s.author), meta: 'backup',

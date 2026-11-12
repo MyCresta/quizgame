@@ -144,6 +144,9 @@ export const KIND_TAG = {
   circle: '<span class="tag map">⭕ Draw</span>', country: '<span class="tag map">✏️ Draw</span>', glass: '<span class="tag number">🍸 Pour</span>',
   jar: '<span class="tag number">🫘 Estimate</span>', centre: '<span class="tag map">🎯 Balance</span>', angle: '<span class="tag number">📐 Angle</span>', maze: '<span class="tag map">🟢 Tilt game</span>',
 };
+// Your colour and the right one as two halves touching each other, so small differences are easy to see.
+export const colorCompare = (mine, real) => (/^#[0-9a-f]{6}$/i.test(mine || '') && /^#[0-9a-f]{6}$/i.test(real || '')
+  ? `<div class="ccmp"><div style="background:${esc(mine)}"><span>Yours<br>${esc(mine)}</span></div><div style="background:${esc(real)}"><span>Correct<br>${esc(real)}</span></div></div>` : '');
 export const swatchHtml = (hex, cls = '') => `<span class="sw ${cls}" style="background:${esc(hex)}"></span>`;
 const secs = (n) => `${(Math.round(n * 100) / 100).toFixed(2)} s`;
 

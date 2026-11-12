@@ -75,7 +75,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
 import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, rhythmTimeline, rhythmVerdict } from './common.js';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js';
 import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js';
 import { LAB } from './lab.js';
 let labCleanup = null;   // stops a running challenge (the marble maze) when leaving the question
@@ -183,6 +183,8 @@ async function viewDone(result) {
     const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';
     const tl = Array.isArray(p.ref) && Array.isArray(p.taps)
       ? `<div style="margin-top:6px">${rhythmTimeline(p.ref, p.taps)}<div class="muted" style="font-size:13px">${rhythmVerdict(p.ref, p.taps)} · orange = the real rhythm, green = your taps</div></div>` : '';
+    const cmp = colorCompare(p.guess, p.color);
+    if (cmp) return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${cmp}</div>`;
     const lab = q && LAB[q.kind] && result.lab?.[q.id] ? `<div class="lab-w" style="margin-top:6px">${LAB[q.kind].reveal(p.meta || q.meta, result.lab[q.id])}</div>` : '';
     if (lab) return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${lab}</div>`;
     return `<div class="line" style="${tl ? 'display:grid' : ''}"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${tl}</div>`;
@@ -367,6 +369,9 @@ async function loadYesterday() {
       if (q.kind === 'tempo') {
         const src = q.source_url ? ` · <a href="${esc(q.source_url)}" target="_blank" rel="noopener">source</a>` : '';
         return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}<br><span class="muted">${Array.isArray(g.json) && q.answer_items ? rhythmVerdict(q.answer_items, g.json) : ''}${src}</span></span><span class="pts">${fmtPts(g.points)}</span></div>${Array.isArray(g.json) && q.answer_items ? rhythmTimeline(q.answer_items, g.json) : ''}</div>`;
+      }
+      if (q.kind === 'color' && g.json && q.answer_color) {
+        return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}${q.fact ? `<br><span class="muted" style="font-size:13px">${esc(q.fact)}</span>` : ''}</span><span class="pts">${fmtPts(g.points)}</span></div>${colorCompare(g.json, q.answer_color)}</div>`;
       }
       const correct = answerHtml(q);
       const yours = q.kind === 'order' ? `you: ${guessHtml(q, g)}` : q.kind === 'map' ? guessHtml(q, g) : `you: ${guessHtml(q, g).replace(/^guessed /, '')}`;

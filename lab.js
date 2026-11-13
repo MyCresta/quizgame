@@ -688,6 +688,21 @@ export function labAnswer(kind, m) {
   if (kind === 'maze') return '5 000 + 5 000';
   return null;
 }
+// What the closest player answered, in words (for the screen's results).
+export function labGuess(kind, m, a) {
+  if (!a) return '';
+  if (kind === 'jar' && a.value) return `guessed ${Number(a.value).toLocaleString('sv-SE')}`;
+  if (kind === 'angle' && a.deg != null) return `${Math.abs(a.deg).toFixed(1)}°`;
+  if (kind === 'glass' && a.level != null) return `${Math.round(a.level * 100)} % up`;
+  if (kind === 'maze' && a.holes) return a.holes.slice(0, 2).map((v) => v.toLocaleString('sv-SE')).join(' + ');
+  return '';
+}
+// A fun fact to show when the question has none of its own.
+export function labFact(kind, m) {
+  if (kind === 'jar') return `Trick: beans across × across × up × 0.6, here ${m.across} × ${m.across} × ${m.height} × 0.6 ≈ ${jarRule(m)}.`;
+  if (kind === 'glass' && m.glass === 'martini') return 'A cone holds most of its drink near the top: half the volume sits at about 79 % of the height.';
+  return '';
+}
 // Picture shown on the office screen next to today's question, so people can study it.
 export function labScreenPic(kind, m) {
   if (kind === 'centre') return `<svg class="pic lab-pic" viewBox="0 0 100 100"><path class="lab-shape" d="${pathD(shapeIn100(m.shape), true)}"/></svg>`;

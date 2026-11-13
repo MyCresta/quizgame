@@ -66,3 +66,8 @@ submitting. Ready-made rounds live in `rounds.js` and in Backups → Spare quest
 ## Admin
 - "🙈 Hide answers" blurs answers, facts and the editor's answer fields; tap one to peek.
 - "⇄ Move" on a question swaps it with any question in another unplayed set (`quiz_admin_swap`).
+
+## Deploying
+Run `python3 tools/stamp.py` before each commit. It puts a version stamp (`?v=…`) on every local script and
+stylesheet, so a browser that already has the site cached can't mix old and new files after an update.
+The screen and the phone page also reload themselves if their code fails to start within a minute.

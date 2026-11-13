@@ -1,8 +1,8 @@
 // Ballpark lab: new challenge types being tried out in Admin → Try it before they go into the quiz.
 // Each challenge has: setup(el, params, onAnswer) to play it, score(params, answer) -> { points, metrics },
 // and reveal(params, answer) -> SVG/HTML that shows the real answer next to yours.
-import { COUNTRIES, FIGURES } from './shapes.js';
-import { ROUNDS, parseRound, isImg } from './rounds.js';
+import { COUNTRIES, FIGURES } from './shapes.js?v=202611130834';
+import { ROUNDS, parseRound, isImg } from './rounds.js?v=202611130834';
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const pts10k = (f) => Math.max(1, Math.min(10000, Math.round(10000 * f)));

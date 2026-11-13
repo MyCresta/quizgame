@@ -1,8 +1,8 @@
 // The 3-question set editor, shared by the "add" page and the admin page.
-import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js';
-import { createColorPicker, hexToRgb, createRecorder, syllables } from './widgets.js';
-import { LAB } from './lab.js';
-import { ROUNDS, parseRound, roundToText } from './rounds.js';
+import { fmt, fmtPts, esc, parseNumber, makeMap, pin, points, KIND_TAG } from './common.js?v=202611130834';
+import { createColorPicker, hexToRgb, createRecorder, syllables } from './widgets.js?v=202611130834';
+import { LAB } from './lab.js?v=202611130834';
+import { ROUNDS, parseRound, roundToText } from './rounds.js?v=202611130834';
 export const LAB_KINDS = Object.entries(LAB).map(([k, c]) => [k, c.title]);
 
 export const SCORING = [

@@ -9,9 +9,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="base.css">
-<link rel="stylesheet" href="widgets.css">
-<link rel="stylesheet" href="lab.css">
+<link rel="stylesheet" href="base.css?v=202611130834">
+<link rel="stylesheet" href="widgets.css?v=202611130834">
+<link rel="stylesheet" href="lab.css?v=202611130834">
 <style>
   body { font-size: 17px; min-height: 100dvh; }
   .app { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -60,6 +60,14 @@
   .yest .total { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gold); }
   .links { display: flex; justify-content: center; gap: 18px; font-size: 15px; }
 </style>
+<script>
+  // Safety net: if the page's code fails to start (e.g. a stale cached file right after an update), reload it.
+  setTimeout(function () {
+    if (window.__bpBooted) return;
+    try { if (!((+sessionStorage.bpRetry || 0) < 3)) return; sessionStorage.bpRetry = (+sessionStorage.bpRetry || 0) + 1; } catch (e) {}
+    location.reload();
+  }, 60000);
+</script>
 </head>
 <body>
 <div class="app">
@@ -74,10 +82,12 @@
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-import { CONFIG } from './config.js';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js';
-import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js';
-import { LAB } from './lab.js';
+window.__bpBooted = true;   // the code loaded (see the safety net in <head>)
+try { sessionStorage.removeItem("bpRetry"); } catch (e) { /* ignore */ }
+import { CONFIG } from './config.js?v=202611130834';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js?v=202611130834';
+import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js?v=202611130834';
+import { LAB } from './lab.js?v=202611130834';
 let labCleanup = null;   // stops a running challenge (the marble maze) when leaving the question
 
 const $ = (id) => document.getElementById(id);

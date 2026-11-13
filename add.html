@@ -9,9 +9,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="base.css">
-<link rel="stylesheet" href="forms.css">
-<link rel="stylesheet" href="widgets.css">
+<link rel="stylesheet" href="base.css?v=202611130834">
+<link rel="stylesheet" href="forms.css?v=202611130834">
+<link rel="stylesheet" href="widgets.css?v=202611130834">
 <style>
   .queue { font-size: 14px; color: var(--muted); }
   .queue b { color: var(--ink); }
@@ -56,9 +56,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-import { CONFIG } from './config.js';
-import { rpc, fmtDate, esc, store } from './common.js';
-import { createSetEditor, renderPreview } from './editor.js';
+import { CONFIG } from './config.js?v=202611130834';
+import { rpc, fmtDate, esc, store } from './common.js?v=202611130834';
+import { createSetEditor, renderPreview } from './editor.js?v=202611130834';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;

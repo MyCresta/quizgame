@@ -1,5 +1,5 @@
 // Interactive answer widgets: colour picker, drag-to-sort list, percent slider, stop-the-clock timer.
-import { esc, rhythmTimeline, rhythmVerdict, rhythmPoints } from './common.js?v=202611130834';
+import { esc, rhythmTimeline, rhythmVerdict, rhythmPoints } from './common.js?v=202611171511';
 
 // ---------- colour helpers ----------
 export function hexToRgb(hex) {

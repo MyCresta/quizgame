@@ -9,9 +9,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="base.css?v=202611130834">
-<link rel="stylesheet" href="widgets.css?v=202611130834">
-<link rel="stylesheet" href="lab.css?v=202611130834">
+<link rel="stylesheet" href="base.css?v=202611171511">
+<link rel="stylesheet" href="widgets.css?v=202611171511">
+<link rel="stylesheet" href="lab.css?v=202611171511">
 <style>
   body { font-size: 17px; min-height: 100dvh; }
   .app { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -84,10 +84,10 @@
 <script type="module">
 window.__bpBooted = true;   // the code loaded (see the safety net in <head>)
 try { sessionStorage.removeItem("bpRetry"); } catch (e) { /* ignore */ }
-import { CONFIG } from './config.js?v=202611130834';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js?v=202611130834';
-import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js?v=202611130834';
-import { LAB } from './lab.js?v=202611130834';
+import { CONFIG } from './config.js?v=202611171511';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js?v=202611171511';
+import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js?v=202611171511';
+import { LAB } from './lab.js?v=202611171511';
 let labCleanup = null;   // stops a running challenge (the marble maze) when leaving the question
 
 const $ = (id) => document.getElementById(id);
@@ -187,12 +187,25 @@ async function viewDone(result) {
   // Repair results saved by an earlier bug, where extra fields came back as their own entries.
   const pts = [];
   for (const p of result.points) { if (p && p.question_id != null) pts.push({ ...p }); else if (p && pts.length) Object.assign(pts[pts.length - 1], p); }
+  // Results saved before the stopped time was sent back: fetch it once.
+  if (pts.some((p) => p.guess == null && qs.find((x) => x.id === p.question_id)?.kind === 'time')) {
+    try {
+      const mine = await rpc('quiz_my_today', { p_player: name });
+      (mine?.points || []).forEach((m) => { const p = pts.find((x) => x.question_id === m.question_id); if (p && m.guess != null && p.guess == null) p.guess = m.guess; });
+    } catch (e) { console.error(e); }
+  }
   const lines = pts.map((p) => {
     const q = qs.find((x) => x.id === p.question_id);
     const pct = p.points / 10000;
     const verdict = pct > 0.9 ? 'Spot on!' : pct > 0.7 ? 'Very close' : pct > 0.4 ? 'Not bad' : pct > 0.1 ? 'Way off' : 'Ouch';
     const tl = Array.isArray(p.ref) && Array.isArray(p.taps)
       ? `<div style="margin-top:6px">${rhythmTimeline(p.ref, p.taps)}<div class="muted" style="font-size:13px">${rhythmVerdict(p.ref, p.taps)} · orange = the real rhythm, green = your taps</div></div>` : '';
+    if (q?.kind === 'time' && p.guess != null && q.target) {
+      const d = p.guess - q.target;
+      const how = Math.abs(d) < 0.005 ? 'exactly on time!' : `${Math.abs(d).toFixed(2).replace('.', ',')} s ${d < 0 ? 'too early' : 'too late'}`;
+      return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q.position}. ${esc(q.prompt)}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>
+        <div class="tcmp"><span>You stopped at <b>${p.guess.toFixed(2).replace('.', ',')} s</b></span><span>Target <b>${fmt(q.target)} s</b></span><span class="tcmp-d ${Math.abs(d) <= 0.25 ? 'good' : ''}">${how}</span></div></div>`;
+    }
     const cmp = colorCompare(p.guess, p.color);
     if (cmp) return `<div class="line" style="display:grid"><div style="display:flex;justify-content:space-between;gap:12px"><span>${q ? `${q.position}. ${esc(q.prompt)}` : ''}<br><span class="muted">${verdict}</span></span><span class="pts">${fmtPts(p.points)}</span></div>${cmp}</div>`;
     const lab = q && LAB[q.kind] && result.lab?.[q.id] ? `<div class="lab-w" style="margin-top:6px">${LAB[q.kind].reveal(p.meta || q.meta, result.lab[q.id])}</div>` : '';

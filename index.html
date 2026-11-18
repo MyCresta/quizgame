@@ -8,8 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="base.css?v=202611171511">
-<link rel="stylesheet" href="lab.css?v=202611171511">
+<link rel="stylesheet" href="base.css?v=202611181028">
+<link rel="stylesheet" href="lab.css?v=202611181028">
 <style>
   /* Sized for a 16:9 screen: everything scales with the viewport. */
   html { font-size: min(1.05vw, 1.87vh); }
@@ -100,7 +100,7 @@
   .r.kind-order .ans { font-size: 1.05rem !important; color: var(--ink); line-height: 1.5; letter-spacing: 0; font-weight: 600; }
   .r.kind-order .ans .ord { margin-right: .5rem; }
   .r .ans small { font-size: 1.2rem; color: var(--muted); font-weight: 600; margin-left: .3rem; }
-  .r .best { font-size: 1.1rem; font-weight: 600; }
+  .r .best { font-size: 1.1rem; font-weight: 600; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   .r .best b { color: var(--mint); }
   .r .fact { font-size: 1rem; color: var(--muted); align-self: end; }
   .r .fact .src { opacity: .75; font-style: italic; }
@@ -251,9 +251,9 @@
 <script type="module">
 window.__bpBooted = true;   // the code loaded (see the safety net in <head>)
 try { sessionStorage.removeItem("bpRetry"); } catch (e) { /* ignore */ }
-import { CONFIG } from './config.js?v=202611171511';
-import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml, rhythmTimeline } from './common.js?v=202611171511';
-import { LAB, labAnswer, labScreenPic, drawJar, roundSummary, labGuess, labFact } from './lab.js?v=202611171511';
+import { CONFIG } from './config.js?v=202611181028';
+import { rpc, fmt, fmtPts, fmtDate, esc, makeMap, pin, dot, distanceKm, pageUrl, KIND_TAG, answerHtml, guessHtml, rhythmTimeline } from './common.js?v=202611181028';
+import { LAB, labAnswer, labScreenPic, drawJar, roundSummary, labGuess, labFact } from './lab.js?v=202611181028';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;
@@ -436,6 +436,18 @@ window.addEventListener('resize', () => { lastQuestionsKey = ''; boardPerPage = 
 const domain = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const factLine = (q) => [q.fact ? esc(q.fact) : '', q.source_url ? `<span class="src">Source: ${esc(domain(q.source_url))}</span>` : ''].filter(Boolean).join(' · ');
 
+// Everyone who matched the best score on a question, e.g. "Closest: Ana, Bo +3" or "Spot on: everyone".
+function bestWho(res, q, b) {
+  if (!b) return '';
+  const got = (res.players || []).map((pl) => ({ n: pl.player, g: pl.guesses?.find((g) => g.question_id === q.id) })).filter((x) => x.g);
+  const tied = got.filter((x) => x.g.points === b.points).map((x) => x.n);
+  if (!tied.length) tied.push(b.player);
+  const label = b.points >= 10000 ? 'Spot on' : tied.length > 1 ? 'Tied best' : 'Closest';
+  if (tied.length > 1 && tied.length === got.length) return `${label}: <b>everyone</b>`;
+  const shown = tied.slice(0, 2).map((n) => `<b>${esc(n)}</b>`).join(', ');
+  return `${label}: ${shown}${tied.length > 2 ? ` <span class="muted">+${tied.length - 2}</span>` : ''}`;
+}
+
 function renderResults(res) {
   maps.forEach((m) => m.remove()); maps = [];
   if (!res || !res.questions) {
@@ -456,12 +468,12 @@ function renderResults(res) {
       return `<div class="r map">
         <div class="rq">${q.position}. ${esc(q.prompt)}</div>
         <div class="ans">${esc(q.answer_label || 'See the map')}</div>
-        <div class="best">${b ? `Closest: <b>${esc(b.player)}</b>, <span class="num">${fmt(Math.round(km))}</span> km away` : ''}</div>
+        <div class="best">${b ? `${bestWho(res, q, b)}, <span class="num">${fmt(Math.round(km))}</span> km away` : ''}</div>
         <div class="fact">${factLine(q)}</div>
         <div class="mini" id="mini-${q.id}"></div>
       </div>`;
     }
-    const who = b ? `Closest: <b>${esc(b.player)}</b>` : '';
+    const who = bestWho(res, q, b);
     const g = b ? guessHtml(q, { guess: b.guess, lat: b.lat, lng: b.lng, json: b.json }) : '';
     if (LAB[q.kind] && q.meta) {
       if (q.kind === 'round') {

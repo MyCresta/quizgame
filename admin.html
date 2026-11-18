@@ -10,10 +10,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="base.css?v=202611181028">
-<link rel="stylesheet" href="forms.css?v=202611181028">
-<link rel="stylesheet" href="widgets.css?v=202611181028">
-<link rel="stylesheet" href="lab.css?v=202611181028">
+<link rel="stylesheet" href="base.css?v=202611181350">
+<link rel="stylesheet" href="forms.css?v=202611181350">
+<link rel="stylesheet" href="widgets.css?v=202611181350">
+<link rel="stylesheet" href="lab.css?v=202611181350">
 <style>
   .app { max-width: 760px; }
   .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -124,11 +124,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
-import { CONFIG } from './config.js?v=202611181028';
-import { rpc, fmt, fmtDate, esc, swatchHtml, fmtPts, store, rhythmPoints, rhythmVerdict, rhythmTimeline } from './common.js?v=202611181028';
-import { createRhythm, createRecorder, PRACTICE_RHYTHM, PRACTICE_WORDS, syllables } from './widgets.js?v=202611181028';
-import { createSetEditor } from './editor.js?v=202611181028';
-import { LAB, labAnswer } from './lab.js?v=202611181028';
+import { CONFIG } from './config.js?v=202611181350';
+import { rpc, fmt, fmtDate, esc, swatchHtml, fmtPts, store, rhythmPoints, rhythmVerdict, rhythmTimeline } from './common.js?v=202611181350';
+import { createRhythm, createRecorder, PRACTICE_RHYTHM, PRACTICE_WORDS, syllables } from './widgets.js?v=202611181350';
+import { createSetEditor } from './editor.js?v=202611181350';
+import { LAB, labAnswer } from './lab.js?v=202611181350';
 
 const $ = (id) => document.getElementById(id);
 $('logo').innerHTML = `${esc(CONFIG.title)}<span class="ball"></span>`;

@@ -1,4 +1,4 @@
-import { CONFIG } from './config.js?v=202611181028';
+import { CONFIG } from './config.js?v=202611181350';
 
 export async function rpc(name, params = {}) {
   const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/rpc/${name}`, {

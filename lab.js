@@ -1,8 +1,8 @@
 // Ballpark lab: new challenge types being tried out in Admin → Try it before they go into the quiz.
 // Each challenge has: setup(el, params, onAnswer) to play it, score(params, answer) -> { points, metrics },
 // and reveal(params, answer) -> SVG/HTML that shows the real answer next to yours.
-import { COUNTRIES, FIGURES } from './shapes.js?v=202611181028';
-import { ROUNDS, parseRound, isImg } from './rounds.js?v=202611181028';
+import { COUNTRIES, FIGURES } from './shapes.js?v=202611181350';
+import { ROUNDS, parseRound, isImg } from './rounds.js?v=202611181350';
 
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const pts10k = (f) => Math.max(1, Math.min(10000, Math.round(10000 * f)));
@@ -77,12 +77,11 @@ function resample(pts, n) {
   return out;
 }
 
-// One-finger freehand drawing on a square canvas. Each new stroke replaces the old one.
 // One-finger freehand drawing on a square canvas. maxTries limits how many drawings count (the last one
 // is the answer); prev restores an earlier drawing when you come back to the question.
 function drawPad(el, onAnswer, { maxTries = Infinity, prev = null } = {}) {
   let used = prev?.tries || (prev?.pts ? 1 : 0), shown = prev?.pts || null;
-  const hint = () => maxTries === Infinity ? 'Draw in one go without lifting your finger. Drawing again starts over.'
+  const hint = () => maxTries === Infinity ? (used ? 'Not happy? Just draw again: your <b>last drawing</b> counts when you lock in.' : 'Draw it in one stroke without lifting your finger. You can redraw as many times as you like.')
     : maxTries === 1 ? (used ? '<b>Done.</b> You only get one go at this one.' : 'You get <b>one go</b>: draw it in one stroke without lifting your finger.')
     : used >= maxTries ? `<b>That was your last try</b> (${maxTries} of ${maxTries}). This drawing counts.`
     : `Draw in one stroke without lifting your finger. ${used ? `Try ${used} of ${maxTries}: draw again to replace it.` : `You get up to ${maxTries} tries; the last one counts.`}`;
@@ -135,7 +134,7 @@ const circle = {
   meta: (p) => ({ tol: p.tol }),
   title: '⭕ Perfect circle', prompt: () => 'Draw a perfect circle',
   params: [{ k: 'tol', label: 'Strictness (roundness error at which points fall off; lower = stricter)', def: 0.08, step: 0.01 }],
-  setup(el, p, onAnswer, opts = {}) { drawPad(el, onAnswer, { maxTries: opts.live ? 1 : Infinity, prev: opts.prev }); },
+  setup(el, p, onAnswer, opts = {}) { drawPad(el, onAnswer, { prev: opts.prev }); },
   score(p, a) {
     const f = circleFit(a.pts);
     if (f.R < 8) return { points: 1, metrics: { note: 'Too small' } };
@@ -159,7 +158,7 @@ const country = {
     { k: 'floor', label: 'Overlap that gives 0 points', def: 0.45, step: 0.05 },
     { k: 'top', label: 'Overlap that gives full points', def: 0.9, step: 0.05 },
   ],
-  setup(el, p, onAnswer, opts = {}) { drawPad(el, onAnswer, { maxTries: opts.live ? 3 : Infinity, prev: opts.prev }); },
+  setup(el, p, onAnswer, opts = {}) { drawPad(el, onAnswer, { prev: opts.prev }); },
   score(p, a) {
     const real = normShape(COUNTRIES[p.country].pts), mine = normShape(a.pts);
     const o = iou(real, mine);

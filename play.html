@@ -9,9 +9,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="base.css?v=202611181028">
-<link rel="stylesheet" href="widgets.css?v=202611181028">
-<link rel="stylesheet" href="lab.css?v=202611181028">
+<link rel="stylesheet" href="base.css?v=202611181350">
+<link rel="stylesheet" href="widgets.css?v=202611181350">
+<link rel="stylesheet" href="lab.css?v=202611181350">
 <style>
   body { font-size: 17px; min-height: 100dvh; }
   .app { max-width: 520px; margin: 0 auto; padding: 16px 16px calc(24px + env(safe-area-inset-bottom)); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -84,10 +84,10 @@
 <script type="module">
 window.__bpBooted = true;   // the code loaded (see the safety net in <head>)
 try { sessionStorage.removeItem("bpRetry"); } catch (e) { /* ignore */ }
-import { CONFIG } from './config.js?v=202611181028';
-import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js?v=202611181028';
-import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js?v=202611181028';
-import { LAB } from './lab.js?v=202611181028';
+import { CONFIG } from './config.js?v=202611181350';
+import { rpc, fmt, fmtPts, fmtDate, esc, parseNumber, makeMap, pin, store, ANSWER_MAX_ZOOM, answerHtml, guessHtml, swatchHtml, colorCompare, rhythmTimeline, rhythmVerdict } from './common.js?v=202611181350';
+import { createColorPicker, createSortable, createPercent, createTimer, createRhythm } from './widgets.js?v=202611181350';
+import { LAB } from './lab.js?v=202611181350';
 let labCleanup = null;   // stops a running challenge (the marble maze) when leaving the question
 
 const $ = (id) => document.getElementById(id);

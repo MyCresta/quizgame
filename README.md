@@ -56,6 +56,8 @@ marble maze. Try and tune them in Admin → Try it, then "Put this challenge in 
 admin set editor; the public add page only offers the classic types). Outlines in `shapes.js` come from
 Natural Earth 1:50m (public domain). Stored as `quiz_questions.lab` + `meta` (settings plus derived targets
 such as the bean count); answers are scored on the server by `quiz_lab_points`, which mirrors `lab.js` exactly.
+Drawing challenges (circle, country) can be redrawn any number of times; the last drawing counts at lock-in,
+and nothing about the score or the real shape is shown before then.
 
 ## Quick rounds
 `round` type: several mini items in one question (true/false, pick one, match pairs), each item (and each
